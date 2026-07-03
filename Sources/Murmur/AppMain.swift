@@ -25,19 +25,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mainWindow: NSWindow?
     private var mainModel: MainModel?
     private var hotkeysArmed = false
+    private var recordingsStore: RecordingsStore!
+    private var recordingPipeline: RecordingPipeline!
+    private var recordingsModel: RecordingsModel!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Diag.app.notice("launch: accessibility=\(Permissions.accessibilityTrusted) inputMonitoring=\(Permissions.inputMonitoringGranted) microphone=\(Permissions.microphoneGranted)")
         AppStore.migrateLegacyDataIfNeeded()
         store = AppStore()
         dictation = DictationController(store: store)
+        recordingsStore = RecordingsStore()
+        recordingPipeline = RecordingPipeline(store: store, recordings: recordingsStore)
+        recordingsModel = RecordingsModel(
+            recordingsStore: recordingsStore, pipeline: recordingPipeline, appStore: store)
 
         statusController = StatusItemController(
             dictation: dictation,
             store: store,
             openSettings: { [weak self] in self?.showSettings() },
             openActivity: { [weak self] in self?.showActivity() },
-            openScratchpad: { [weak self] in self?.showScratchpad() })
+            openScratchpad: { [weak self] in self?.showScratchpad() },
+            toggleLongRecording: { [weak self] in self?.recordingsModel.toggleRecording() },
+            longRecordingElapsed: { [weak self] in
+                guard let started = self?.recordingsModel.recorder.startedAt else { return nil }
+                let s = Int(Date().timeIntervalSince(started))
+                return String(format: "%d:%02d", s / 60, s % 60)
+            })
 
         var pillActions = PillActions()
         pillActions.handsFreeToggle = { [weak self] in self?.dictation.handsFreeToggle() }
@@ -132,7 +145,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func showMain(_ section: MainSection) {
         if mainWindow == nil {
-            let model = MainModel(store: store, dictation: dictation) { [weak self] in
+            let model = MainModel(store: store, recordingsModel: recordingsModel,
+                                  dictation: dictation) { [weak self] in
                 guard let self else { return }
                 self.hotkeys.bindings = self.store.settings.bindings
             }

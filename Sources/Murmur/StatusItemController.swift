@@ -12,17 +12,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let openSettings: () -> Void
     private let openActivity: () -> Void
     private let openScratchpad: () -> Void
+    private let toggleLongRecording: () -> Void
+    private let longRecordingElapsed: () -> String?
 
     init(dictation: DictationController,
          store: AppStore,
          openSettings: @escaping () -> Void,
          openActivity: @escaping () -> Void,
-         openScratchpad: @escaping () -> Void) {
+         openScratchpad: @escaping () -> Void,
+         toggleLongRecording: @escaping () -> Void,
+         longRecordingElapsed: @escaping () -> String?) {
         self.dictation = dictation
         self.store = store
         self.openSettings = openSettings
         self.openActivity = openActivity
         self.openScratchpad = openScratchpad
+        self.toggleLongRecording = toggleLongRecording
+        self.longRecordingElapsed = longRecordingElapsed
         super.init()
 
         let menu = NSMenu()
@@ -60,6 +66,15 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+
+        if let elapsed = longRecordingElapsed() {
+            menu.addItem(withTitle: "Stop Recording (\(elapsed))",
+                         action: #selector(toggleLongRec), keyEquivalent: "").target = self
+        } else {
+            menu.addItem(withTitle: "Start Recording",
+                         action: #selector(toggleLongRec), keyEquivalent: "").target = self
+        }
+        menu.addItem(.separator())
 
         let recording = dictation.isRecording
         menu.addItem(withTitle: recording ? "Stop Hands-Free Dictation" : "Start Hands-Free Dictation",
@@ -99,6 +114,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                      action: #selector(quit), keyEquivalent: "q").target = self
     }
 
+    @objc private func toggleLongRec() { toggleLongRecording() }
     @objc private func toggleHandsFree() { dictation.handsFreeToggle() }
     @objc private func pasteLast() { dictation.pasteLastTranscript() }
     @objc private func copyLast() { dictation.copyLastTranscript() }

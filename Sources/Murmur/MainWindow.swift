@@ -3,6 +3,7 @@ import MurmurCore
 
 enum MainSection: String, CaseIterable, Identifiable {
     case home = "Home"
+    case recordings = "Recordings"
     case dictionary = "Dictionary"
     case snippets = "Snippets"
     case style = "Style"
@@ -14,6 +15,7 @@ enum MainSection: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .home: "square.grid.2x2"
+        case .recordings: "waveform"
         case .dictionary: "character.book.closed"
         case .snippets: "scissors"
         case .style: "textformat"
@@ -31,11 +33,14 @@ final class MainModel {
     var onPermissionsChanged: () -> Void = {}
     let store: AppStore
     let settingsModel: SettingsModel
+    let recordingsModel: RecordingsModel
     let onBindingsChanged: () -> Void
     weak var dictation: DictationController?
 
-    init(store: AppStore, dictation: DictationController?, onBindingsChanged: @escaping () -> Void) {
+    init(store: AppStore, recordingsModel: RecordingsModel,
+         dictation: DictationController?, onBindingsChanged: @escaping () -> Void) {
         self.store = store
+        self.recordingsModel = recordingsModel
         self.dictation = dictation
         self.settingsModel = SettingsModel(store: store)
         self.onBindingsChanged = onBindingsChanged
@@ -79,6 +84,7 @@ struct MainView: View {
     private var contentPane: some View {
         switch model.section {
         case .home: HomePage(model: model)
+        case .recordings: RecordingsPage(model: model.recordingsModel)
         case .dictionary: DictionaryPage(model: model.settingsModel)
         case .snippets: SnippetsPage(model: model.settingsModel)
         case .style: StylePage(model: model.settingsModel)
@@ -108,7 +114,7 @@ private struct Sidebar: View {
             .padding(.top, 18)
             .padding(.bottom, 20)
 
-            ForEach([MainSection.home, .dictionary, .snippets, .style, .scratchpad]) { section in
+            ForEach([MainSection.home, .recordings, .dictionary, .snippets, .style, .scratchpad]) { section in
                 row(section)
             }
 

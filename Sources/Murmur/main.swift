@@ -74,7 +74,15 @@ if let flagIndex = CommandLine.arguments.firstIndex(of: "--snapshot"),
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     await MainActor.run {
         let store = AppStore()
-        let model = MainModel(store: store, dictation: nil) {}
+        let snapshotRecordings = RecordingsStore(rootDirectory:
+            FileManager.default.temporaryDirectory.appendingPathComponent("murmur-snapshot-recordings"))
+        let model = MainModel(
+            store: store,
+            recordingsModel: RecordingsModel(
+                recordingsStore: snapshotRecordings,
+                pipeline: RecordingPipeline(store: store, recordings: snapshotRecordings),
+                appStore: store),
+            dictation: nil) {}
         for section in MainSection.allCases {
             model.section = section
             let renderer = ImageRenderer(content: MainView(model: model)

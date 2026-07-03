@@ -39,6 +39,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <string>AppIcon</string>
     <key>LSUIElement</key>
     <true/>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Murmur records system audio during long-form recordings so both sides of a call are captured.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Murmur records your voice while you hold the dictation hotkey so it can transcribe what you say.</string>
     <key>NSSpeechRecognitionUsageDescription</key>

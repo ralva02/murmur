@@ -37,6 +37,7 @@ struct SettingsPage: View {
     let onBindingsChanged: () -> Void
     let onRunSetup: () -> Void
     @State private var supportedLocales: [Locale] = []
+    @State private var claudeKey = KeychainStore.readClaudeKey() ?? ""
 
     var body: some View {
         Page(title: "Settings") {
@@ -107,6 +108,49 @@ struct SettingsPage: View {
                             .frame(width: 220)
                     }
                 }
+            }
+
+            section("Summaries") {
+                labeledRow("Engine") {
+                    Picker("", selection: $model.settings.summaryEngine) {
+                        Text("Ollama (local)").tag(SummaryEngine.ollama)
+                        Text("Claude API").tag(SummaryEngine.claude)
+                    }
+                    .labelsHidden()
+                    .frame(width: 220)
+                }
+                if model.settings.summaryEngine == .claude {
+                    labeledRow("Claude model") {
+                        TextField("model", text: $model.settings.claudeModel)
+                            .textFieldStyle(.plain)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 220)
+                    }
+                    labeledRow("API key") {
+                        SecureField("sk-ant-…", text: $claudeKey)
+                            .textFieldStyle(.plain)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 220)
+                            .onSubmit { KeychainStore.saveClaudeKey(claudeKey) }
+                    }
+                    HStack {
+                        Text("Stored in the macOS Keychain. Transcripts (not audio) are sent to Anthropic when summarizing — roughly $0.10–0.15 per hour-long recording at Opus pricing.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.inkTertiary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                }
+                toggleRow("Watch Downloads for Plaud exports", isOn: $model.settings.downloadsWatcherEnabled)
+                HStack {
+                    Text("Applies at next launch.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.inkTertiary)
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
             }
 
             section("Shortcuts") {
