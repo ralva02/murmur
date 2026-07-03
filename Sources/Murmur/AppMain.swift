@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UserNotifications
 import MurmurCore
 
 /// Menu-bar app shell: builds the store, controller, listener, and UI.
@@ -15,7 +16,7 @@ enum AppMain {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
 
     private var store: AppStore!
     private var dictation: DictationController!
@@ -28,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingsStore: RecordingsStore!
     private var recordingPipeline: RecordingPipeline!
     private var recordingsModel: RecordingsModel!
+    private var downloadsWatcher: DownloadsWatcher!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Diag.app.notice("launch: accessibility=\(Permissions.accessibilityTrusted) inputMonitoring=\(Permissions.inputMonitoringGranted) microphone=\(Permissions.microphoneGranted)")
@@ -127,6 +129,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // First run: open the window so the onboarding wizard is visible.
         if !store.settings.onboardingCompleted { showMain(.home) }
+
+        UNUserNotificationCenter.current().delegate = self
+        downloadsWatcher = DownloadsWatcher()
+        if store.settings.downloadsWatcherEnabled { downloadsWatcher.start() }
+    }
+
+    /// Confirm-to-import notifications from the Downloads watcher.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        // Extract Sendable values before hopping actors (Swift 6).
+        let path = response.notification.request.content.userInfo["path"] as? String
+        let action = response.actionIdentifier
+        completionHandler()
+        guard let path,
+              action == DownloadsWatcher.importAction || action == UNNotificationDefaultActionIdentifier
+        else { return }
+        Task { @MainActor in
+            self.recordingsModel.importFiles([URL(fileURLWithPath: path)])
+            self.showMain(.recordings)
+        }
     }
 
     /// Called as onboarding pages land permission grants: the listener needs
