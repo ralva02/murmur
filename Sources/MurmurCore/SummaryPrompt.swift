@@ -14,6 +14,18 @@ public enum SummaryPrompt {
         - Omit any section that would be empty rather than padding it.
         - Write in clear, complete sentences. Output Markdown with `##` section headings.
         - Do not include preamble or commentary — output only the summary document.
+
+        Begin your output with a title line: `TITLE: ` followed by a concise
+        name for this recording (6 words or fewer). Then the summary sections.
+        After the summary, if there are any action items, append a machine block
+        listing them, one per line as `- <task> | <assignee>` (use `Unassigned`
+        when no owner is named):
+
+        <!--TASKS
+        - <task> | <assignee>
+        -->
+
+        Include the TASKS block only if there are action items; never invent tasks.
         """
 
         let shape: String = switch template {
