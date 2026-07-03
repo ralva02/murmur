@@ -1,32 +1,29 @@
 import Testing
 @testable import MurmurCore
 
-@Test func parseSplitsTitleAndStripsTaskBlock() {
+@Test func parseSplitsTitleKeepsBody() {
     let raw = """
     TITLE: Q3 Launch Sync
     ## Overview
     We shipped it.
-    <!--TASKS
-    - Prepare the deck | Priya
-    - Send the contract | Unassigned
-    -->
+    ## Action items
+    - Prepare the deck (@Priya)
     """
     let out = SummaryOutput.parse(raw)
     #expect(out.title == "Q3 Launch Sync")
     #expect(out.body.contains("## Overview"))
     #expect(!out.body.contains("TITLE:"))
-    #expect(!out.body.contains("TASKS"))
-    #expect(!out.body.contains("Prepare the deck"))
+    #expect(out.body.contains("Prepare the deck"))   // tasks stay visible in the body
 }
 
-@Test func parseToleratesMissingTitleAndTasks() {
+@Test func parseToleratesMissingTitle() {
     let out = SummaryOutput.parse("## Overview\nJust a summary.")
     #expect(out.title == nil)
     #expect(out.body == "## Overview\nJust a summary.")
 }
 
-@Test func promptRequestsTitleAndTasks() {
+@Test func promptRequestsTitleAndOwnerMarker() {
     let system = SummaryPrompt.build(template: .auto, transcript: "t").system
     #expect(system.contains("TITLE:"))
-    #expect(system.contains("<!--TASKS"))
+    #expect(system.contains("(@Name)"))
 }
