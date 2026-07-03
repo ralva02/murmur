@@ -9,15 +9,18 @@ final class RecordingsModel {
     let recordingsStore: RecordingsStore
     let pipeline: RecordingPipeline
     let appStore: AppStore
+    let tasksStore: TasksStore
     let recorder = LongFormRecorder()
+    weak var tasksModel: TasksModel?
     var recordings: [Recording] = []
     var selectedID: UUID?
     var progress: [UUID: Double] = [:]
 
-    init(recordingsStore: RecordingsStore, pipeline: RecordingPipeline, appStore: AppStore) {
+    init(recordingsStore: RecordingsStore, pipeline: RecordingPipeline, appStore: AppStore, tasksStore: TasksStore) {
         self.recordingsStore = recordingsStore
         self.pipeline = pipeline
         self.appStore = appStore
+        self.tasksStore = tasksStore
         self.recordings = recordingsStore.recordings
         pipeline.onChange = { [weak self] in
             guard let self else { return }
@@ -78,6 +81,8 @@ final class RecordingsModel {
 
     func delete(_ id: UUID) {
         recordingsStore.delete(id: id)
+        tasksStore.deleteTasks(forRecording: id)
+        tasksModel?.refresh()
         recordings = recordingsStore.recordings
         if selectedID == id { selectedID = nil }
     }
@@ -395,6 +400,7 @@ private struct RecordingDetail: View {
     @State private var player = PlayerModel()
     @State private var template: SummaryTemplate = .auto
     @State private var transcriptShown = false
+    @State private var reviewing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -452,6 +458,15 @@ private struct RecordingDetail: View {
                     .buttonStyle(GhostButtonStyle())
             }
 
+            if !recording.pendingTasks.isEmpty {
+                Button {
+                    reviewing = true
+                } label: {
+                    Label("\(recording.pendingTasks.count) tasks to review", systemImage: "checklist")
+                }
+                .buttonStyle(PrimaryPillButtonStyle())
+            }
+
             if let summary = model.recordingsStore.summary(for: recording.id) {
                 summaryView(summary)
             }
@@ -471,6 +486,14 @@ private struct RecordingDetail: View {
         }
         .onAppear { template = recording.template }
         .onDisappear { player.stop() }
+        .sheet(isPresented: $reviewing) {
+            TaskReviewSheet(recording: recording, tasksStore: model.tasksStore,
+                            recordingsStore: model.recordingsStore) {
+                reviewing = false
+                model.recordings = model.recordingsStore.recordings
+                model.tasksModel?.refresh()
+            }
+        }
     }
 
     private func summaryView(_ markdown: String) -> some View {

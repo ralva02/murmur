@@ -94,8 +94,13 @@ final class RecordingPipeline {
         do {
             let (provider, tag) = try makeProvider()
             let transcript = recordings.transcript(for: id) ?? ""
-            let summary = try await provider.summarize(transcript: transcript, template: rec.template)
-            recordings.saveSummary(summary, for: id)
+            let raw = try await provider.summarize(transcript: transcript, template: rec.template)
+            let parsed = SummaryOutput.parse(raw)
+            recordings.saveSummary(parsed.body, for: id)
+            if let title = parsed.title, !rec.titleIsCustom {
+                rec.title = title
+            }
+            rec.pendingTasks = TaskExtractor.parse(raw)
             rec.summaryEngine = tag
             rec.status = .done
         } catch let error as AnthropicError {
@@ -115,6 +120,13 @@ final class RecordingPipeline {
             }
             return (OllamaSummaryProvider(client: OllamaClient(baseURL: url), model: settings.cleanupModel),
                     "ollama:\(settings.cleanupModel)")
+        case .lmStudio:
+            guard let url = URL(string: settings.lmStudioURL) else {
+                throw AnthropicError(kind: .http(0), message: "Invalid LM Studio URL in Settings.")
+            }
+            let model = settings.lmStudioModel.isEmpty ? "local-model" : settings.lmStudioModel
+            return (LMStudioSummaryProvider(client: OpenAICompatibleClient(baseURL: url, model: model)),
+                    "lmstudio:\(settings.lmStudioModel.isEmpty ? "loaded" : settings.lmStudioModel)")
         case .claude:
             guard let key = KeychainStore.readClaudeKey(), !key.isEmpty else {
                 throw AnthropicError(kind: .invalidKey, message: "No Claude API key — add one in Settings → Summaries.")

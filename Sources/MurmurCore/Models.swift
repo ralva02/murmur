@@ -68,7 +68,7 @@ public enum CleanupEngine: String, Codable, Sendable, Equatable {
 }
 
 public enum SummaryEngine: String, Codable, Sendable, Equatable {
-    case ollama, claude
+    case ollama, lmStudio, claude
 }
 
 public struct Settings: Codable, Sendable, Equatable {
@@ -92,6 +92,8 @@ public struct Settings: Codable, Sendable, Equatable {
     /// Long-form recording summaries: local Ollama by default, Claude opt-in.
     public var summaryEngine: SummaryEngine
     public var claudeModel: String
+    public var lmStudioURL: String
+    public var lmStudioModel: String
     public var downloadsWatcherEnabled: Bool
 
     public init(
@@ -108,6 +110,8 @@ public struct Settings: Codable, Sendable, Equatable {
         onboardingCompleted: Bool = false,
         summaryEngine: SummaryEngine = .ollama,
         claudeModel: String = "claude-opus-4-8",
+        lmStudioURL: String = "http://localhost:1234/v1",
+        lmStudioModel: String = "",
         downloadsWatcherEnabled: Bool = false
     ) {
         self.contextAwareness = contextAwareness
@@ -123,6 +127,8 @@ public struct Settings: Codable, Sendable, Equatable {
         self.onboardingCompleted = onboardingCompleted
         self.summaryEngine = summaryEngine
         self.claudeModel = claudeModel
+        self.lmStudioURL = lmStudioURL
+        self.lmStudioModel = lmStudioModel
         self.downloadsWatcherEnabled = downloadsWatcherEnabled
     }
 
@@ -130,7 +136,7 @@ public struct Settings: Codable, Sendable, Equatable {
         case contextAwareness, autoAddDictionary, defaultLanguage, outputLanguage
         case cleanupEnabled, cleanupModel, ollamaURL, pressEnterEnabled
         case historyEnabled, bindings, cleanupEngine, onboardingCompleted
-        case summaryEngine, claudeModel, downloadsWatcherEnabled
+        case summaryEngine, claudeModel, lmStudioURL, lmStudioModel, downloadsWatcherEnabled
     }
 
     public init(from decoder: Decoder) throws {
@@ -150,6 +156,8 @@ public struct Settings: Codable, Sendable, Equatable {
         onboardingCompleted = try c.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? true
         summaryEngine = try c.decodeIfPresent(SummaryEngine.self, forKey: .summaryEngine) ?? .ollama
         claudeModel = try c.decodeIfPresent(String.self, forKey: .claudeModel) ?? "claude-opus-4-8"
+        lmStudioURL = try c.decodeIfPresent(String.self, forKey: .lmStudioURL) ?? "http://localhost:1234/v1"
+        lmStudioModel = try c.decodeIfPresent(String.self, forKey: .lmStudioModel) ?? ""
         downloadsWatcherEnabled = try c.decodeIfPresent(Bool.self, forKey: .downloadsWatcherEnabled) ?? false
     }
 }

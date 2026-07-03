@@ -114,10 +114,25 @@ struct SettingsPage: View {
                 labeledRow("Engine") {
                     Picker("", selection: $model.settings.summaryEngine) {
                         Text("Ollama (local)").tag(SummaryEngine.ollama)
+                        Text("LM Studio").tag(SummaryEngine.lmStudio)
                         Text("Claude API").tag(SummaryEngine.claude)
                     }
                     .labelsHidden()
                     .frame(width: 220)
+                }
+                if model.settings.summaryEngine == .lmStudio {
+                    labeledRow("Base URL") {
+                        TextField("http://localhost:1234/v1", text: $model.settings.lmStudioURL)
+                            .textFieldStyle(.plain)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 220)
+                    }
+                    labeledRow("Model (optional)") {
+                        TextField("loaded model", text: $model.settings.lmStudioModel)
+                            .textFieldStyle(.plain)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 220)
+                    }
                 }
                 if model.settings.summaryEngine == .claude {
                     labeledRow("Claude model") {

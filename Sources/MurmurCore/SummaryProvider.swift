@@ -21,6 +21,15 @@ public struct OllamaSummaryProvider: SummaryProvider {
     }
 }
 
+public struct LMStudioSummaryProvider: SummaryProvider {
+    let client: OpenAICompatibleClient
+    public init(client: OpenAICompatibleClient) { self.client = client }
+    public func summarize(transcript: String, template: SummaryTemplate) async throws -> String {
+        let prompt = SummaryPrompt.build(template: template, transcript: transcript)
+        return try await client.chat(system: prompt.system, user: prompt.user)
+    }
+}
+
 public struct ClaudeSummaryProvider: SummaryProvider {
     let client: AnthropicClient
 

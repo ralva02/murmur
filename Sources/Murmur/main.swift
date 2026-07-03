@@ -76,12 +76,15 @@ if let flagIndex = CommandLine.arguments.firstIndex(of: "--snapshot"),
         let store = AppStore()
         let snapshotRecordings = RecordingsStore(rootDirectory:
             FileManager.default.temporaryDirectory.appendingPathComponent("murmur-snapshot-recordings"))
+        let snapshotTasks = TasksStore(rootDirectory:
+            FileManager.default.temporaryDirectory.appendingPathComponent("murmur-snapshot-tasks"))
         let model = MainModel(
             store: store,
             recordingsModel: RecordingsModel(
                 recordingsStore: snapshotRecordings,
                 pipeline: RecordingPipeline(store: store, recordings: snapshotRecordings),
-                appStore: store),
+                appStore: store, tasksStore: snapshotTasks),
+            tasksModel: TasksModel(store: snapshotTasks),
             dictation: nil) {}
         for section in MainSection.allCases {
             model.section = section

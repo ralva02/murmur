@@ -29,6 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var recordingsStore: RecordingsStore!
     private var recordingPipeline: RecordingPipeline!
     private var recordingsModel: RecordingsModel!
+    private var tasksStore: TasksStore!
+    private var tasksModel: TasksModel!
     private var downloadsWatcher: DownloadsWatcher!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -37,9 +39,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         store = AppStore()
         dictation = DictationController(store: store)
         recordingsStore = RecordingsStore()
+        tasksStore = TasksStore()
         recordingPipeline = RecordingPipeline(store: store, recordings: recordingsStore)
         recordingsModel = RecordingsModel(
-            recordingsStore: recordingsStore, pipeline: recordingPipeline, appStore: store)
+            recordingsStore: recordingsStore, pipeline: recordingPipeline,
+            appStore: store, tasksStore: tasksStore)
+        tasksModel = TasksModel(store: tasksStore)
+        recordingsModel.tasksModel = tasksModel
+        tasksModel.onOpenRecording = { [weak self] id in
+            self?.recordingsModel.selectedID = id
+            self?.showMain(.recordings)
+        }
 
         statusController = StatusItemController(
             dictation: dictation,
@@ -171,7 +181,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func showMain(_ section: MainSection) {
         if mainWindow == nil {
             let model = MainModel(store: store, recordingsModel: recordingsModel,
-                                  dictation: dictation) { [weak self] in
+                                  tasksModel: tasksModel, dictation: dictation) { [weak self] in
                 guard let self else { return }
                 self.hotkeys.bindings = self.store.settings.bindings
             }

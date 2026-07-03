@@ -50,6 +50,18 @@ import Testing
     #expect(back == s)
 }
 
+@Test func lmStudioSettingsDefaultsAndRoundTrip() throws {
+    let fresh = Settings()
+    #expect(fresh.lmStudioURL == "http://localhost:1234/v1")
+    #expect(fresh.lmStudioModel == "")
+    var s = Settings()
+    s.summaryEngine = .lmStudio
+    s.lmStudioModel = "qwen-mlx"
+    let back = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s))
+    #expect(back == s)
+    #expect(back.summaryEngine == .lmStudio)
+}
+
 @Test func appCategorization() {
     #expect(AppCategory.categorize(bundleId: "com.apple.mail") == .email)
     #expect(AppCategory.categorize(bundleId: "com.tinyspeck.slackmacgap") == .chat)
