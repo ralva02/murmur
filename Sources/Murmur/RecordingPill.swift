@@ -354,32 +354,34 @@ private struct PillView: View {
     }
 }
 
-/// Mic-level-driven equalizer (the Wispr look): bars scroll left at 20 Hz,
-/// each new bar carrying the PEAK level since the last tick — sampling the
+/// Mic-level-driven equalizer: stationary bars that bounce in place with the
+/// voice. Each tick carries the PEAK level since the last one — sampling the
 /// instantaneous level would alias past syllables and detach the motion from
-/// the speech rhythm. No cross-bar animation: crisp steps read as real.
+/// the speech rhythm. Per-bar jitter keeps the bounce organic; silence is a
+/// flat dotted line.
 private struct WaveDots: View {
     let level: Float
-    @State private var history: [Float] = Array(repeating: 0, count: 14)
+    @State private var heights: [Float] = Array(repeating: 0, count: 14)
     @State private var peak: Float = 0
     private let tick = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
     var body: some View {
         HStack(spacing: 3.5) {
-            ForEach(history.indices, id: \.self) { i in
+            ForEach(heights.indices, id: \.self) { i in
                 Capsule()
                     .fill(.white)
-                    .frame(width: 3, height: max(3, CGFloat(history[i]) * 16))
+                    .frame(width: 3, height: max(3, CGFloat(heights[i]) * 16))
             }
         }
         .frame(height: 18)
         .onChange(of: level) { peak = max(peak, level) }
         .onReceive(tick) { _ in
-            history.removeFirst()
             // sqrt lifts quiet speech into the visible range without
             // flattening loud peaks.
-            history.append(sqrt(min(peak * 1.5, 1)))
+            let v = sqrt(min(peak * 1.5, 1))
+            heights = heights.map { _ in v * Float.random(in: 0.55...1.0) }
             peak = level
         }
+        .animation(.linear(duration: 0.05), value: heights)
     }
 }
