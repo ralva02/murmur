@@ -79,6 +79,30 @@ private func makeAudioFixture() throws -> URL {
     #expect(store.recordings.first?.title == "new")
 }
 
+@Test func tagRoundTripAndLegacyMetaDecodesToInbox() throws {
+    let root = tempRoot()
+    let store = RecordingsStore(rootDirectory: root)
+    var rec = try store.create(
+        importingAudioFrom: makeAudioFixture(), source: .inApp,
+        title: "r", duration: 1, language: "en-US", template: .auto)
+    #expect(rec.tag == nil)   // new recordings land in the Inbox
+
+    rec.tag = "Work"
+    store.update(rec)
+    let reloaded = RecordingsStore(rootDirectory: root)
+    #expect(reloaded.recordings[0].tag == "Work")
+    #expect(reloaded.allTags == ["Work"])
+
+    // meta.json written before the tag field existed decodes to Inbox.
+    let legacy = try JSONSerialization.jsonObject(
+        with: JSONEncoder().encode(rec)) as! [String: Any]
+    var stripped = legacy
+    stripped.removeValue(forKey: "tag")
+    let decoded = try JSONDecoder().decode(
+        Recording.self, from: JSONSerialization.data(withJSONObject: stripped))
+    #expect(decoded.tag == nil)
+}
+
 // Same regression guard as AppStore (2026-07-03 data-loss postmortem):
 // production-path construction from a test process must trap.
 @Test func productionPathRecordingsStoreTrapsUnderTests() async {

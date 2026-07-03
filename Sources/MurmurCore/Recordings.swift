@@ -38,12 +38,16 @@ public struct Recording: Codable, Sendable, Equatable, Identifiable {
     public var status: Status
     /// True when in-app capture ran without the system-audio tap.
     public var micOnly: Bool
+    /// Triage tag. nil = Inbox (new, not yet actioned); tagging moves the
+    /// recording into that tag's section.
+    public var tag: String?
 
     public init(
         id: UUID = UUID(), title: String, createdAt: Date = Date(),
         duration: TimeInterval, source: Source, audioFilename: String,
         language: String, template: SummaryTemplate,
-        summaryEngine: String? = nil, status: Status = .ready, micOnly: Bool = false
+        summaryEngine: String? = nil, status: Status = .ready, micOnly: Bool = false,
+        tag: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -56,6 +60,7 @@ public struct Recording: Codable, Sendable, Equatable, Identifiable {
         self.summaryEngine = summaryEngine
         self.status = status
         self.micOnly = micOnly
+        self.tag = tag
     }
 }
 
@@ -154,6 +159,11 @@ public final class RecordingsStore: @unchecked Sendable {
     public func delete(id: UUID) {
         recordings.removeAll { $0.id == id }
         try? FileManager.default.removeItem(at: directory(for: id))
+    }
+
+    /// All tags in use, sorted, for the tag-picker menu.
+    public var allTags: [String] {
+        Set(recordings.compactMap(\.tag)).sorted()
     }
 
     private func save(_ recording: Recording) {

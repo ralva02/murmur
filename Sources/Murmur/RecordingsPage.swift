@@ -88,6 +88,37 @@ final class RecordingsModel {
         recordingsStore.update(rec)
         recordings = recordingsStore.recordings
     }
+
+    // MARK: Tags (triage)
+
+    var inbox: [Recording] { recordings.filter { $0.tag == nil } }
+    var allTags: [String] { recordingsStore.allTags }
+    var taggedGroups: [(tag: String, items: [Recording])] {
+        allTags.map { tag in (tag, recordings.filter { $0.tag == tag }) }
+    }
+
+    func setTag(_ tag: String?, for id: UUID) {
+        guard var rec = recordings.first(where: { $0.id == id }) else { return }
+        rec.tag = tag
+        recordingsStore.update(rec)
+        recordings = recordingsStore.recordings
+    }
+
+    func promptNewTag(for id: UUID) {
+        let alert = NSAlert()
+        alert.messageText = "New tag"
+        alert.informativeText = "The recording moves into this tag's section."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
+        field.placeholderString = "e.g. Work"
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Tag")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        if alert.runModal() == .alertFirstButtonReturn {
+            let tag = field.stringValue.trimmingCharacters(in: .whitespaces)
+            if !tag.isEmpty { setTag(tag, for: id) }
+        }
+    }
 }
 
 struct RecordingsPage: View {
@@ -117,9 +148,30 @@ struct RecordingsPage: View {
             if model.recordings.isEmpty {
                 emptyState
             } else {
-                ForEach(model.recordings) { recording in
-                    RecordingRow(model: model, recording: recording,
-                                 expanded: model.selectedID == recording.id)
+                // Inbox first: everything not yet triaged.
+                sectionHeader("Inbox", count: model.inbox.count)
+                if model.inbox.isEmpty {
+                    Text("Inbox zero — everything's been triaged.")
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Theme.inkTertiary)
+                        .padding(.bottom, 8)
+                } else {
+                    ForEach(model.inbox) { recording in
+                        RecordingRow(model: model, recording: recording,
+                                     expanded: model.selectedID == recording.id)
+                    }
+                }
+
+                ForEach(model.taggedGroups, id: \.tag) { group in
+                    DisclosureGroup(isExpanded: expandedBinding(group.tag)) {
+                        ForEach(group.items) { recording in
+                            RecordingRow(model: model, recording: recording,
+                                         expanded: model.selectedID == recording.id)
+                        }
+                        .padding(.top, 8)
+                    } label: {
+                        sectionHeader(group.tag, count: group.items.count)
+                    }
                 }
             }
         }
@@ -131,6 +183,33 @@ struct RecordingsPage: View {
             }
             return true
         }
+    }
+
+    @State private var expandedTags: Set<String> = []
+
+    private func expandedBinding(_ tag: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedTags.contains(tag) },
+            set: { open in
+                if open { expandedTags.insert(tag) } else { expandedTags.remove(tag) }
+            })
+    }
+
+    private func sectionHeader(_ title: String, count: Int) -> some View {
+        HStack(spacing: 8) {
+            Text(title.uppercased())
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.inkTertiary)
+                .kerning(0.8)
+            Text("\(count)")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Theme.inkSecondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(Theme.sidebarSelection, in: Capsule())
+            Spacer()
+        }
+        .padding(.top, 4)
     }
 
     private func elapsedLabel(at date: Date) -> String {
@@ -182,6 +261,7 @@ private struct RecordingRow: View {
                     }
                     Spacer()
                     statusBadge
+                    tagMenu
                 }
                 .padding(14)
                 .contentShape(Rectangle())
@@ -195,6 +275,38 @@ private struct RecordingRow: View {
         }
         .card()
         .padding(.bottom, 8)
+    }
+
+    /// Existing tags + "New Tag…" + "Move to Inbox" for triage.
+    private var tagMenu: some View {
+        Menu {
+            ForEach(model.allTags, id: \.self) { tag in
+                Button {
+                    model.setTag(tag, for: recording.id)
+                } label: {
+                    if recording.tag == tag {
+                        Label(tag, systemImage: "checkmark")
+                    } else {
+                        Text(tag)
+                    }
+                }
+            }
+            if !model.allTags.isEmpty { Divider() }
+            Button("New Tag…") { model.promptNewTag(for: recording.id) }
+            if recording.tag != nil {
+                Button("Move to Inbox") { model.setTag(nil, for: recording.id) }
+            }
+        } label: {
+            Image(systemName: recording.tag == nil ? "tag" : "tag.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(recording.tag == nil ? Theme.inkTertiary : Theme.violet)
+                .frame(width: 26, height: 26)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(recording.tag ?? "Tag this recording")
     }
 
     private var durationLabel: String {
