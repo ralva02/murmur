@@ -103,6 +103,33 @@ private func makeAudioFixture() throws -> URL {
     #expect(decoded.tag == nil)
 }
 
+@Test func recordingNewFieldsDefaultAndPersist() throws {
+    let root = tempRoot()
+    let store = RecordingsStore(rootDirectory: root)
+    var rec = try store.create(
+        importingAudioFrom: makeAudioFixture(), source: .inApp,
+        title: "r", duration: 1, language: "en-US", template: .auto)
+    #expect(rec.titleIsCustom == false)
+    #expect(rec.pendingTasks.isEmpty)
+
+    rec.titleIsCustom = true
+    rec.pendingTasks = [ExtractedTask(title: "t", assignee: "Sue")]
+    store.update(rec)
+    let reloaded = RecordingsStore(rootDirectory: root)
+    #expect(reloaded.recordings[0].titleIsCustom == true)
+    #expect(reloaded.recordings[0].pendingTasks == [ExtractedTask(title: "t", assignee: "Sue")])
+
+    // Legacy meta.json without the fields decodes to defaults.
+    let legacy = try JSONSerialization.jsonObject(with: JSONEncoder().encode(rec)) as! [String: Any]
+    var stripped = legacy
+    stripped.removeValue(forKey: "titleIsCustom")
+    stripped.removeValue(forKey: "pendingTasks")
+    let decoded = try JSONDecoder().decode(
+        Recording.self, from: JSONSerialization.data(withJSONObject: stripped))
+    #expect(decoded.titleIsCustom == false)
+    #expect(decoded.pendingTasks.isEmpty)
+}
+
 // Same regression guard as AppStore (2026-07-03 data-loss postmortem):
 // production-path construction from a test process must trap.
 @Test func productionPathRecordingsStoreTrapsUnderTests() async {

@@ -41,13 +41,18 @@ public struct Recording: Codable, Sendable, Equatable, Identifiable {
     /// Triage tag. nil = Inbox (new, not yet actioned); tagging moves the
     /// recording into that tag's section.
     public var tag: String?
+    /// True once the user renames the recording — stops summarize from
+    /// overwriting the title with the LLM-generated one.
+    public var titleIsCustom: Bool
+    /// Extracted-but-unreviewed action items (draft-then-confirm).
+    public var pendingTasks: [ExtractedTask]
 
     public init(
         id: UUID = UUID(), title: String, createdAt: Date = Date(),
         duration: TimeInterval, source: Source, audioFilename: String,
         language: String, template: SummaryTemplate,
         summaryEngine: String? = nil, status: Status = .ready, micOnly: Bool = false,
-        tag: String? = nil
+        tag: String? = nil, titleIsCustom: Bool = false, pendingTasks: [ExtractedTask] = []
     ) {
         self.id = id
         self.title = title
@@ -61,6 +66,31 @@ public struct Recording: Codable, Sendable, Equatable, Identifiable {
         self.status = status
         self.micOnly = micOnly
         self.tag = tag
+        self.titleIsCustom = titleIsCustom
+        self.pendingTasks = pendingTasks
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, createdAt, duration, source, audioFilename, language
+        case template, summaryEngine, status, micOnly, tag, titleIsCustom, pendingTasks
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        duration = try c.decode(TimeInterval.self, forKey: .duration)
+        source = try c.decode(Source.self, forKey: .source)
+        audioFilename = try c.decode(String.self, forKey: .audioFilename)
+        language = try c.decode(String.self, forKey: .language)
+        template = try c.decode(SummaryTemplate.self, forKey: .template)
+        summaryEngine = try c.decodeIfPresent(String.self, forKey: .summaryEngine)
+        status = try c.decode(Status.self, forKey: .status)
+        micOnly = try c.decodeIfPresent(Bool.self, forKey: .micOnly) ?? false
+        tag = try c.decodeIfPresent(String.self, forKey: .tag)
+        titleIsCustom = try c.decodeIfPresent(Bool.self, forKey: .titleIsCustom) ?? false
+        pendingTasks = try c.decodeIfPresent([ExtractedTask].self, forKey: .pendingTasks) ?? []
     }
 }
 
