@@ -108,21 +108,39 @@ final class AudioTranscriber {
         }
 
         let micFormat = audioEngine.inputNode.outputFormat(forBus: 0)
-        guard let tapConverter = AVAudioConverter(from: micFormat, to: analyzerFormat) else {
+        // Without microphone permission the input format is 0 Hz and
+        // installTap raises an unrecoverable ObjC exception.
+        guard micFormat.sampleRate > 0,
+              let tapConverter = AVAudioConverter(from: micFormat, to: analyzerFormat) else {
             throw TranscriberError.noAudioFormat
         }
         converter = tapConverter
 
-        // The tap runs on the audio thread: only locals are captured, never self.
-        audioEngine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: micFormat) {
-            buffer, _ in
-            guard let converted = Self.convert(buffer: buffer, with: tapConverter, to: analyzerFormat)
-            else { return }
-            continuation.yield(AnalyzerInput(buffer: converted))
-        }
+        Self.installStreamTap(
+            on: audioEngine, converter: tapConverter,
+            format: analyzerFormat, continuation: continuation)
 
         audioEngine.prepare()
         try audioEngine.start()
+    }
+
+    /// The tap closure runs on the audio thread. It must be formed in a
+    /// nonisolated context — created inside a @MainActor method it would
+    /// inherit main-actor isolation and trap the isolation assertion when
+    /// the audio thread invokes it. Only locals are captured, never self.
+    private nonisolated static func installStreamTap(
+        on engine: AVAudioEngine,
+        converter: AVAudioConverter,
+        format: AVAudioFormat,
+        continuation: AsyncStream<AnalyzerInput>.Continuation
+    ) {
+        let micFormat = engine.inputNode.outputFormat(forBus: 0)
+        engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: micFormat) {
+            buffer, _ in
+            guard let converted = convert(buffer: buffer, with: converter, to: format)
+            else { return }
+            continuation.yield(AnalyzerInput(buffer: converted))
+        }
     }
 
     nonisolated private static func convert(

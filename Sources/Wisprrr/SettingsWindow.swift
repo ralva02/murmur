@@ -286,8 +286,12 @@ private struct AudioTab: View {
                         level = 0
                     } else {
                         let m = AudioLevelMeter { level = $0 }
-                        try? m.start()
-                        meter = m
+                        do {
+                            try m.start()
+                            meter = m
+                        } catch {
+                            Permissions.openMicrophoneSettings()
+                        }
                     }
                 }
             }
@@ -300,26 +304,45 @@ private struct AudioTab: View {
 /// Tiny RMS meter for the Audio settings tab.
 @MainActor
 final class AudioLevelMeter {
-    private let engine = AVAudioEngine()
-    private let onLevel: (Float) -> Void
+    struct MeterError: Error {}
 
-    init(onLevel: @escaping (Float) -> Void) {
+    private let engine = AVAudioEngine()
+    private let onLevel: @MainActor (Float) -> Void
+
+    init(onLevel: @escaping @MainActor (Float) -> Void) {
         self.onLevel = onLevel
     }
 
     func start() throws {
-        let format = engine.inputNode.outputFormat(forBus: 0)
+        // Without microphone permission the input node reports a 0 Hz format,
+        // and installTap raises an unrecoverable ObjC exception on it.
+        guard engine.inputNode.outputFormat(forBus: 0).sampleRate > 0 else {
+            throw MeterError()
+        }
         let handler = onLevel
+        Self.installTap(on: engine) { rms in
+            Task { @MainActor in handler(min(rms * 8, 1)) }
+        }
+        engine.prepare()
+        try engine.start()
+    }
+
+    /// The tap closure runs on the audio thread. It must be formed in a
+    /// nonisolated context — created inside a @MainActor method it would
+    /// inherit main-actor isolation and trap the isolation assertion when
+    /// the audio thread invokes it.
+    private nonisolated static func installTap(
+        on engine: AVAudioEngine,
+        sink: @escaping @Sendable (Float) -> Void
+    ) {
+        let format = engine.inputNode.outputFormat(forBus: 0)
         engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
             guard let data = buffer.floatChannelData?[0] else { return }
             let frames = Int(buffer.frameLength)
             var sum: Float = 0
             for i in 0..<frames { sum += data[i] * data[i] }
-            let rms = frames > 0 ? sqrtf(sum / Float(frames)) : 0
-            DispatchQueue.main.async { handler(min(rms * 8, 1)) }
+            sink(frames > 0 ? sqrtf(sum / Float(frames)) : 0)
         }
-        engine.prepare()
-        try engine.start()
     }
 
     func stop() {
