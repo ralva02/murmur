@@ -55,6 +55,7 @@ public struct OllamaClient: Sendable {
             ],
             "stream": false,
             "options": ["temperature": 0],
+            "keep_alive": "30m",
         ] as [String: Any])
 
         let (data, status) = try await transport.send(request)
@@ -63,6 +64,22 @@ public struct OllamaClient: Sendable {
         }
         let content = try JSONDecoder().decode(ChatResponse.self, from: data).message.content
         return Self.stripFences(content).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Loads the model and primes the prompt-prefix cache while the user is
+    /// still speaking, so the real request only pays for generation.
+    public func prewarm(model: String, system: String) async {
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/chat"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "model": model,
+            "messages": [["role": "system", "content": system]],
+            "stream": false,
+            "options": ["num_predict": 1],
+            "keep_alive": "30m",
+        ] as [String: Any])
+        _ = try? await transport.send(request)
     }
 
     public func isAlive() async -> Bool {

@@ -44,13 +44,26 @@ final class DictationController {
         }
     }
 
-    private func makePipeline() async -> DictationPipeline {
+    /// Built while the user is still speaking so the Ollama health check and
+    /// model load/prefill overlap with the recording instead of adding to the
+    /// release-to-text pause.
+    private var pendingPipeline: Task<DictationPipeline, Never>?
+
+    private func makePipeline(prewarmFor context: ContextPayload?) async -> DictationPipeline {
         let settings = store.settings
         var cleanup: CleanupProvider = PassthroughCleanupProvider()
         if settings.cleanupEnabled, let url = URL(string: settings.ollamaURL) {
             let client = OllamaClient(baseURL: url)
             if await client.isAlive() {
                 cleanup = OllamaCleanupProvider(client: client, model: settings.cleanupModel)
+                if let context {
+                    let prompt = PromptBuilder.cleanupPrompt(
+                        rawTranscript: "", context: context,
+                        dictionary: store.dictionary,
+                        style: store.style(for: context.appCategory))
+                    let model = settings.cleanupModel
+                    Task.detached { await client.prewarm(model: model, system: prompt.system) }
+                }
             }
         }
         return DictationPipeline(
@@ -164,6 +177,8 @@ final class DictationController {
         let bias = store.dictionary.map(\.term) + sessionContext.properNouns
         let locale = Locale(identifier: store.settings.defaultLanguage)
         Diag.dictation.notice("recording started (handsFree=\(handsFree), app=\(self.sessionContext.appBundleId ?? "?", privacy: .public))")
+        let context = sessionContext
+        pendingPipeline = Task { await makePipeline(prewarmFor: context) }
         startTask = Task {
             do {
                 try await transcriber.start(locale: locale, contextualStrings: bias)
@@ -212,7 +227,13 @@ final class DictationController {
             return
         }
 
-        let pipeline = await makePipeline()
+        let pipeline: DictationPipeline
+        if let pending = pendingPipeline {
+            pipeline = await pending.value
+        } else {
+            pipeline = await makePipeline(prewarmFor: nil)
+        }
+        pendingPipeline = nil
         let output = await pipeline.process(rawTranscript: raw, context: sessionContext)
 
         state = .injecting

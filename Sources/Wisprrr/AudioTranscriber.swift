@@ -170,6 +170,10 @@ final class AudioTranscriber {
     }
 
     /// Stops capture, finalizes recognition, returns the full transcript.
+    ///
+    /// Finalization can take 1–2 s, but the volatile transcript is essentially
+    /// complete at release and the cleanup LLM re-punctuates anyway — so the
+    /// wait is capped and the live transcript used when finalization is slow.
     func stop() async -> String {
         guard let analyzer else { return "" }
         audioEngine.inputNode.removeTap(onBus: 0)
@@ -177,8 +181,27 @@ final class AudioTranscriber {
         inputContinuation?.finish()
         inputContinuation = nil
 
-        try? await analyzer.finalizeAndFinishThroughEndOfInput()
-        await resultsTask?.value
+        let results = resultsTask
+        let finalized = await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                try? await analyzer.finalizeAndFinishThroughEndOfInput()
+                await results?.value
+                return true
+            }
+            group.addTask {
+                try? await Task.sleep(for: .milliseconds(700))
+                return false
+            }
+            let winner = await group.next() ?? false
+            group.cancelAll()
+            return winner
+        }
+        if !finalized {
+            Diag.dictation.notice("ASR finalize exceeded 700ms; using live transcript")
+            Task { await analyzer.cancelAndFinishNow() }   // background teardown
+        }
+
+        resultsTask?.cancel()
         resultsTask = nil
         self.analyzer = nil
         self.transcriber = nil
