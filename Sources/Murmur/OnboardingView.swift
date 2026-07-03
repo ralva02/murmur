@@ -216,13 +216,182 @@ private struct PermissionStep: View {
     }
 }
 
-// MARK: - Cleanup engine + Try it (filled in by the next plan task)
+// MARK: - Cleanup engine
 
 private struct CleanupStep: View {
     @Bindable var model: MainModel
-    var body: some View { Text("cleanup step").foregroundStyle(Theme.ink) }
+    @State private var aiStatus = AppleIntelligenceStatus.current()
+    @State private var showOllama = false
+    @State private var ollamaAlive = false
+    @State private var pullProgress: Double?
+    @State private var pullStatus: String?
+    @State private var pullError: String?
+    @State private var pullTask: Task<Void, Never>?
+    private let tick = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Spacer()
+            Text("Polished, not just transcribed")
+                .font(Theme.serif(30))
+                .foregroundStyle(Theme.ink)
+            Text("A local model removes filler words, fixes punctuation, and resolves \"wait, no…\" corrections. Nothing leaves this Mac.")
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.inkSecondary)
+                .frame(maxWidth: 480, alignment: .leading)
+
+            engineRow(
+                selected: model.settingsModel.settings.cleanupEngine == .appleIntelligence,
+                title: "Apple Intelligence",
+                subtitle: aiStatus.explanation,
+                enabled: aiStatus == .ready
+            ) { model.settingsModel.settings.cleanupEngine = .appleIntelligence }
+
+            engineRow(
+                selected: model.settingsModel.settings.cleanupEngine == .ollama,
+                title: "Ollama (best quality)",
+                subtitle: ollamaAlive
+                    ? "Ollama is running."
+                    : "Runs larger models locally. Install it from ollama.com, then download a model here.",
+                enabled: ollamaAlive
+            ) { model.settingsModel.settings.cleanupEngine = .ollama }
+
+            DisclosureGroup("Set up Ollama", isExpanded: $showOllama) {
+                VStack(alignment: .leading, spacing: 10) {
+                    if !ollamaAlive {
+                        HStack(spacing: 10) {
+                            Button("Get Ollama") {
+                                NSWorkspace.shared.open(URL(string: "https://ollama.com/download")!)
+                            }
+                            .buttonStyle(GhostButtonStyle())
+                            Text("Waiting for Ollama to start…")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Theme.inkTertiary)
+                        }
+                    } else if let progress = pullProgress {
+                        HStack(spacing: 10) {
+                            ProgressView(value: progress).tint(Theme.violet).frame(width: 220)
+                            Text(pullStatus ?? "downloading…")
+                                .font(.system(size: 12)).foregroundStyle(Theme.inkTertiary)
+                            Button("Cancel") { pullTask?.cancel() }.buttonStyle(GhostButtonStyle())
+                        }
+                    } else {
+                        Button("Download \(model.settingsModel.settings.cleanupModel)") { startPull() }
+                            .buttonStyle(PrimaryPillButtonStyle())
+                    }
+                    if let pullError {
+                        HStack(spacing: 10) {
+                            Text(pullError).font(.system(size: 12)).foregroundStyle(.red)
+                            Button("Retry") { startPull() }.buttonStyle(GhostButtonStyle())
+                        }
+                    }
+                }
+                .padding(.top, 8)
+            }
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(Theme.ink)
+            .frame(maxWidth: 480, alignment: .leading)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear { probe() }
+        .onReceive(tick) { _ in probe() }
+        .onDisappear { pullTask?.cancel() }
+    }
+
+    private func probe() {
+        aiStatus = AppleIntelligenceStatus.current()
+        guard let url = URL(string: model.settingsModel.settings.ollamaURL) else { return }
+        Task {
+            let alive = await OllamaClient(baseURL: url).isAlive()
+            await MainActor.run { ollamaAlive = alive }
+        }
+    }
+
+    private func startPull() {
+        guard let url = URL(string: model.settingsModel.settings.ollamaURL) else { return }
+        let modelName = model.settingsModel.settings.cleanupModel
+        pullError = nil
+        pullProgress = 0
+        pullTask = Task {
+            do {
+                try await OllamaClient(baseURL: url).pull(model: modelName) { event in
+                    Task { @MainActor in
+                        if let f = event.fraction { pullProgress = f }
+                        pullStatus = event.status
+                        if event.isSuccess {
+                            pullProgress = nil
+                            model.settingsModel.settings.cleanupEngine = .ollama
+                        }
+                    }
+                }
+                await MainActor.run { pullProgress = nil }
+            } catch is CancellationError {
+                await MainActor.run { pullProgress = nil }
+            } catch {
+                await MainActor.run {
+                    pullProgress = nil
+                    pullError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func engineRow(
+        selected: Bool, title: String, subtitle: String,
+        enabled: Bool, choose: @escaping () -> Void
+    ) -> some View {
+        Button(action: choose) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: selected ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(selected ? Theme.violet : Theme.inkTertiary)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.ink)
+                    Text(subtitle).font(.system(size: 12)).foregroundStyle(Theme.inkSecondary)
+                }
+                Spacer()
+            }
+            .padding(14)
+            .frame(maxWidth: 480, alignment: .leading)
+            .background(Theme.card)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(selected ? Theme.violet : Theme.cardBorder, lineWidth: selected ? 1.5 : 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled && !selected)
+        .opacity(enabled || selected ? 1 : 0.55)
+    }
 }
 
+// MARK: - Try it
+
 private struct TryItStep: View {
-    var body: some View { Text("try it").foregroundStyle(Theme.ink) }
+    @State private var scratch = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Spacer()
+            Text("Try it")
+                .font(Theme.serif(30))
+                .foregroundStyle(Theme.ink)
+            Text("Click into the field below, hold **Fn**, and say something like \"um so let's meet tuesday, wait no, friday\". Release Fn and watch the polished version land.")
+                .font(.system(size: 14))
+                .foregroundStyle(Theme.inkSecondary)
+                .frame(maxWidth: 480, alignment: .leading)
+            TextEditor(text: $scratch)
+                .font(.system(size: 14))
+                .scrollContentBackground(.hidden)
+                .padding(12)
+                .frame(maxWidth: 480, minHeight: 120, maxHeight: 160)
+                .background(Theme.card)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Theme.cardBorder, lineWidth: 1))
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
 }

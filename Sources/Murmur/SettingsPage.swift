@@ -35,6 +35,7 @@ final class SettingsModel {
 struct SettingsPage: View {
     @Bindable var model: SettingsModel
     let onBindingsChanged: () -> Void
+    let onRunSetup: () -> Void
     @State private var supportedLocales: [Locale] = []
 
     var body: some View {
@@ -142,6 +143,17 @@ struct SettingsPage: View {
                         .foregroundStyle(Theme.inkTertiary)
                     Spacer()
                     Button("Clear history") { model.store.clearHistory() }
+                        .buttonStyle(GhostButtonStyle())
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                Rectangle().fill(Theme.rowSeparator).frame(height: 1)
+                HStack {
+                    Text("Walk through permissions and cleanup setup again.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.inkTertiary)
+                    Spacer()
+                    Button("Run setup again") { onRunSetup() }
                         .buttonStyle(GhostButtonStyle())
                 }
                 .padding(.horizontal, 16)

@@ -83,7 +83,10 @@ struct MainView: View {
         case .snippets: SnippetsPage(model: model.settingsModel)
         case .style: StylePage(model: model.settingsModel)
         case .scratchpad: ScratchpadPage(store: model.store)
-        case .settings: SettingsPage(model: model.settingsModel, onBindingsChanged: model.onBindingsChanged)
+        case .settings: SettingsPage(
+            model: model.settingsModel,
+            onBindingsChanged: model.onBindingsChanged,
+            onRunSetup: { model.showOnboarding = true })
         }
     }
 }
