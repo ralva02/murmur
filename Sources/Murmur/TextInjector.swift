@@ -32,7 +32,7 @@ enum TextInjector {
         // Last resort: leave it on the clipboard and tell the user (spec §5.1).
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-        notify(title: "Wisprrr", body: "Failed to insert text — copied to clipboard.")
+        notify(title: "Murmur", body: "Failed to insert text — copied to clipboard.")
         return Result(inserted: false, fellBackToClipboard: true)
     }
 

@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import WisprrrCore
+import MurmurCore
 
 /// Menu-bar app shell: builds the store, controller, listener, and UI.
 @MainActor
@@ -24,9 +24,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pill: RecordingPillController!
     private var settingsWindow: NSWindow?
     private var activityWindow: NSWindow?
+    private var scratchpadWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Diag.app.notice("launch: accessibility=\(Permissions.accessibilityTrusted) inputMonitoring=\(Permissions.inputMonitoringGranted) microphone=\(Permissions.microphoneGranted)")
+        AppStore.migrateLegacyDataIfNeeded()
         store = AppStore()
         dictation = DictationController(store: store)
 
@@ -34,7 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             dictation: dictation,
             store: store,
             openSettings: { [weak self] in self?.showSettings() },
-            openActivity: { [weak self] in self?.showActivity() })
+            openActivity: { [weak self] in self?.showActivity() },
+            openScratchpad: { [weak self] in self?.showScratchpad() })
 
         pill = RecordingPillController()
         dictation.onStateChange = { [weak self] state in
@@ -62,13 +65,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case .commandMode: self.dictation.commandModeToggle()
             case .cancelDictation: self.dictation.cancel()
             case .pasteLastTranscript: self.dictation.pasteLastTranscript()
+            case .copyLastTranscript: self.dictation.copyLastTranscript()
             case .viewDiff: self.showActivity()
+            case .openScratchpad: self.showScratchpad()
             case .pushToTalk, .handsFree: break // handled by Fn transitions
             }
         }
 
         if !hotkeys.start() {
-            TextInjector.notify(title: "Wisprrr",
+            TextInjector.notify(title: "Murmur",
                 body: "Global hotkeys need Accessibility & Input Monitoring permission. Grant them, then relaunch from the menu bar icon.")
         }
 
@@ -80,13 +85,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the app looks like it never opened. Give it a visible surface.
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             guard let self, self.statusController.isHiddenByNotch else { return }
-            TextInjector.notify(title: "Wisprrr is running",
+            TextInjector.notify(title: "Murmur is running",
                 body: "Its menu bar icon is hidden behind the notch. Remove or ⌘-drag other menu bar icons to make room. Hold Fn to dictate — dictation works regardless.")
             self.showSettings()
         }
     }
 
-    /// Opening Wisprrr.app while it's already running lands here: always show
+    /// Opening Murmur.app while it's already running lands here: always show
     /// a window so "the app is not opening" can't happen silently.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         showSettings()
@@ -99,7 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 contentRect: NSRect(x: 0, y: 0, width: 620, height: 460),
                 styleMask: [.titled, .closable, .miniaturizable],
                 backing: .buffered, defer: false)
-            window.title = "Wisprrr Settings"
+            window.title = "Murmur Settings"
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(
                 rootView: SettingsView(store: store, onBindingsChanged: { [weak self] in
@@ -113,13 +118,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    func showScratchpad() {
+        if scratchpadWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 640, height: 440),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered, defer: false)
+            window.title = "Murmur — Scratchpad"
+            window.isReleasedWhenClosed = false
+            window.contentView = NSHostingView(rootView: ScratchpadView(store: store))
+            window.center()
+            scratchpadWindow = window
+        }
+        scratchpadWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     func showActivity() {
         if activityWindow == nil {
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered, defer: false)
-            window.title = "Wisprrr — Recent Activity"
+            window.title = "Murmur — Recent Activity"
             window.isReleasedWhenClosed = false
             window.contentView = NSHostingView(rootView: ActivityView(store: store, dictation: dictation))
             window.center()

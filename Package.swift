@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "Wisprrr",
+    name: "Murmur",
     platforms: [.macOS("26.0")],
     targets: [
-        .target(name: "WisprrrCore"),
-        .executableTarget(name: "Wisprrr", dependencies: ["WisprrrCore"]),
-        .testTarget(name: "WisprrrCoreTests", dependencies: ["WisprrrCore"]),
+        .target(name: "MurmurCore"),
+        .executableTarget(name: "Murmur", dependencies: ["MurmurCore"]),
+        .testTarget(name: "MurmurCoreTests", dependencies: ["MurmurCore"]),
     ]
 )

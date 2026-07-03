@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import WisprrrCore
+@testable import MurmurCore
 
 @Test func cleanupPromptContainsContractAndConditioning() {
     let ctx = ContextPayload(
@@ -10,11 +10,11 @@ import Testing
     let p = PromptBuilder.cleanupPrompt(
         rawTranscript: "um so lets meet tuesday wait no friday",
         context: ctx,
-        dictionary: [DictionaryEntry(term: "Wisprrr")],
+        dictionary: [DictionaryEntry(term: "Murmur")],
         style: Style(appCategory: .email, tone: "warm and professional"))
     #expect(p.system.contains("smallest edits"))
     #expect(p.system.contains("Never add facts"))
-    #expect(p.system.contains("Wisprrr"))
+    #expect(p.system.contains("Murmur"))
     #expect(p.system.contains("warm and professional"))
     #expect(p.system.contains("Anaïs Kowalczyk"))
     #expect(p.user.contains("lets meet tuesday"))
@@ -55,4 +55,15 @@ import Testing
     let style = try JSONDecoder().decode(Style.self, from: Data(legacy.utf8))
     #expect(style.sample.isEmpty)
     #expect(style.tone == "warm")
+}
+
+@Test func cleanupPromptIncludesTranslation() {
+    let p = PromptBuilder.cleanupPrompt(rawTranscript: "hola", context: .empty,
+                                        dictionary: [], style: nil, translateTo: "German")
+    #expect(p.system.contains("Translate the final text into German"))
+}
+
+@Test func cleanupPromptOmitsTranslationByDefault() {
+    let p = PromptBuilder.cleanupPrompt(rawTranscript: "hi", context: .empty, dictionary: [], style: nil)
+    #expect(!p.system.contains("Translate"))
 }

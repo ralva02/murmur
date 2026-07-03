@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import WisprrrCore
+@testable import MurmurCore
 
 @Test func settingsDefaultsRoundTrip() throws {
     let s = Settings()

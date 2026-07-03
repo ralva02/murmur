@@ -1,4 +1,4 @@
-# Wisprrr
+# Murmur
 
 A free, fully local, single-user voice-to-text layer for macOS — a personal
 [Wispr Flow](docs/wispr-flow-spec.md) clone. Hold a hotkey, speak naturally, and
@@ -19,13 +19,13 @@ whatever app is focused. Nothing leaves your Mac.
 - macOS 26+ on Apple Silicon
 - [Ollama](https://ollama.com) running locally with the cleanup model:
   `ollama pull gemma4:e4b`
-  (Without Ollama, Wisprrr still works — it inserts the raw on-device transcript.)
+  (Without Ollama, Murmur still works — it inserts the raw on-device transcript.)
 
 ## Build & run
 
 ```bash
-bash Scripts/make_app.sh     # builds build/Wisprrr.app
-open build/Wisprrr.app
+bash Scripts/make_app.sh     # builds build/Murmur.app
+open build/Murmur.app
 ```
 
 First run: grant the three permissions when prompted (all re-grantable later
@@ -46,19 +46,22 @@ one-time).
 | Hands-free toggle | **double-tap Fn** (stop with another double-tap or single press) |
 | Cancel while recording | **Esc** |
 | Command Mode (rewrite selection) | select text, **⌃⌥C**, speak an instruction ("make this more concise") |
-| Paste last transcript | **⌃⌥V** |
+| Command Mode (ask the web) | **⌃⌥C** with nothing selected, speak a question → opens a Perplexity search |
+| Paste / copy last transcript | **⌃⌥V** / **⌃⌥X** |
+| Scratchpad (brain-dump notes) | **⌃⌥N** or menu bar |
 | Recent activity / View Diff | **⌃⌥D** or menu bar |
 | "press enter" | say it at the very end of a dictation to submit (Slack, chat, etc.) |
 
-Settings (menu bar → Settings…): language, Ollama model/URL, shortcuts,
-dictionary, snippets ("my email address" → your@email), per-app-category tone,
-context awareness, history.
+Settings (menu bar → Settings…): language (picker of all on-device speech
+locales), optional translation of output into another language, Ollama
+model/URL, shortcuts, dictionary, snippets ("my email address" → your@email),
+per-app-category tone + writing samples, context awareness, history.
 
 ## Development
 
 ```bash
-swift test                                        # unit tests (WisprrrCore)
-swift run Wisprrr --process-text "some raw text"  # pipeline smoke test, no mic/AX
+swift test                                        # unit tests (MurmurCore)
+swift run Murmur --process-text "some raw text"  # pipeline smoke test, no mic/AX
 ```
 
 Design doc: `docs/superpowers/specs/2026-07-03-wisprrr-design.md` ·
@@ -81,7 +84,7 @@ Source spec: `docs/wispr-flow-spec.md`
 ## Personalization that compounds
 
 - **Auto-add to dictionary** (Settings → Personalization): correct a word
-  Wisprrr inserted and the corrected spelling is learned automatically — it
+  Murmur inserted and the corrected spelling is learned automatically — it
   then biases both recognition and the cleanup pass.
 - **Style samples**: paste an example of how you actually write per app
   category; it's injected into the cleanup prompt as a few-shot exemplar
@@ -89,9 +92,8 @@ Source spec: `docs/wispr-flow-spec.md`
 
 ## Known limitations (v1)
 
-- Command Mode query routing (§8.2) is not implemented.
 - Undo forwards ⌘Z to the target app (relies on its undo stack).
-- One language per session (the `defaultLanguage` setting); no mid-sentence
-  language switching.
+- One language per session (pick it in Settings); no mid-sentence language
+  switching or auto-detect — Apple's on-device transcriber is single-locale.
 - Custom (non-standard) password fields may not be detected as secure — same
   documented limitation as the original.

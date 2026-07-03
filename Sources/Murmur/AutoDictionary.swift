@@ -1,10 +1,10 @@
 import ApplicationServices
 import Foundation
-import WisprrrCore
+import MurmurCore
 
 /// Auto-add-to-dictionary (spec §7.1): after inserting a transcript, re-read
 /// the same field a little later and learn any spellings the user corrected.
-/// Reads ONLY the field Wisprrr itself pasted into, and only while the
+/// Reads ONLY the field Murmur itself pasted into, and only while the
 /// Personalization toggle is on.
 @MainActor
 final class AutoDictionaryMonitor {
@@ -52,7 +52,7 @@ final class AutoDictionaryMonitor {
         Diag.dictation.notice("auto-added to dictionary: \(corrections.joined(separator: ", "), privacy: .public)")
         TextInjector.notify(title: "Added to dictionary",
             body: corrections.map { "“\($0)”" }.joined(separator: ", ")
-                + " — Wisprrr will spell it this way from now on.")
+                + " — Murmur will spell it this way from now on.")
         return true
     }
 }

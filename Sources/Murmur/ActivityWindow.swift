@@ -1,5 +1,5 @@
 import SwiftUI
-import WisprrrCore
+import MurmurCore
 
 /// Recent activity with View Diff (spec §12): what the cleanup changed.
 struct ActivityView: View {

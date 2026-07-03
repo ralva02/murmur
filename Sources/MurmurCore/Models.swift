@@ -33,6 +33,7 @@ public enum AppCategory: String, Codable, Sendable, CaseIterable, Equatable {
 
 public enum BindableAction: String, Codable, Sendable, CaseIterable, Equatable {
     case pushToTalk, handsFree, commandMode, cancelDictation, pasteLastTranscript, viewDiff
+    case copyLastTranscript, openScratchpad
 }
 
 public struct HotkeyBinding: Codable, Sendable, Equatable {
@@ -55,6 +56,8 @@ public struct HotkeyBinding: Codable, Sendable, Equatable {
         HotkeyBinding(action: .cancelDictation, keyCode: 53, modifiers: 0),    // Esc while recording
         HotkeyBinding(action: .pasteLastTranscript, keyCode: 9, modifiers: 0x0004_0000 | 0x0008_0000), // Ctrl+Opt+V
         HotkeyBinding(action: .viewDiff, keyCode: 2, modifiers: 0x0004_0000 | 0x0008_0000),    // Ctrl+Opt+D
+        HotkeyBinding(action: .copyLastTranscript, keyCode: 7, modifiers: 0x0004_0000 | 0x0008_0000), // Ctrl+Opt+X
+        HotkeyBinding(action: .openScratchpad, keyCode: 45, modifiers: 0x0004_0000 | 0x0008_0000),    // Ctrl+Opt+N
     ]
 }
 
@@ -64,6 +67,9 @@ public struct Settings: Codable, Sendable, Equatable {
     public var contextAwareness: Bool
     public var autoAddDictionary: Bool
     public var defaultLanguage: String
+    /// Optional: translate final output into this language (e.g. "Spanish").
+    /// Optional so settings saved before this field existed still decode.
+    public var outputLanguage: String?
     public var cleanupEnabled: Bool
     public var cleanupModel: String
     public var ollamaURL: String
@@ -176,6 +182,20 @@ public struct ContextPayload: Sendable, Equatable {
     }
 
     public static let empty = ContextPayload()
+}
+
+// MARK: - Scratchpad notes (spec §12)
+
+public struct Note: Codable, Sendable, Equatable, Identifiable {
+    public var id: UUID
+    public var text: String
+    public var createdAt: Date
+
+    public init(id: UUID = UUID(), text: String, createdAt: Date = Date()) {
+        self.id = id
+        self.text = text
+        self.createdAt = createdAt
+    }
 }
 
 // MARK: - History (spec §12, §16)

@@ -13,7 +13,8 @@ public enum PromptBuilder {
         rawTranscript: String,
         context: ContextPayload,
         dictionary: [DictionaryEntry],
-        style: Style?
+        style: Style?,
+        translateTo: String? = nil
     ) -> Prompt {
         var lines: [String] = []
         lines.append("""
@@ -39,6 +40,9 @@ public enum PromptBuilder {
             if !style.sample.isEmpty {
                 lines.append("Example of this user's writing in this context — match its voice, not its content:\n\(style.sample)")
             }
+        }
+        if let translateTo, !translateTo.isEmpty {
+            lines.append("Translate the final text into \(translateTo). Apply all other rules first, then output only the translation.")
         }
         if context.appCategory == .code || context.appCategory == .terminal {
             lines.append("This is a coding context: preserve identifier casing such as camelCase and snake_case, file names, and technical terms verbatim.")

@@ -39,10 +39,13 @@ public struct PassthroughCleanupProvider: CleanupProvider {
 public struct OllamaCleanupProvider: CleanupProvider {
     let client: OllamaClient
     let model: String
+    /// When set, the cleanup pass also translates into this language (spec §10).
+    let translateTo: String?
 
-    public init(client: OllamaClient, model: String) {
+    public init(client: OllamaClient, model: String, translateTo: String? = nil) {
         self.client = client
         self.model = model
+        self.translateTo = translateTo
     }
 
     public func cleanup(
@@ -53,7 +56,7 @@ public struct OllamaCleanupProvider: CleanupProvider {
     ) async -> CleanupResult {
         let prompt = PromptBuilder.cleanupPrompt(
             rawTranscript: rawTranscript, context: context,
-            dictionary: dictionary, style: style)
+            dictionary: dictionary, style: style, translateTo: translateTo)
         do {
             let output = try await client.chat(model: model, system: prompt.system, user: prompt.user)
             guard Self.isSane(output: output, input: rawTranscript) else {

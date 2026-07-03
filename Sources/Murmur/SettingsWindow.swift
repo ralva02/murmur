@@ -1,5 +1,6 @@
+import Speech
 import SwiftUI
-import WisprrrCore
+import MurmurCore
 
 /// Settings UI (spec §12): General, Personalization, Data & Privacy, Audio.
 struct SettingsView: View {
@@ -32,7 +33,7 @@ struct SettingsView: View {
 final class SettingsModel {
     let store: AppStore
 
-    var settings: WisprrrCore.Settings {
+    var settings: MurmurCore.Settings {
         didSet { store.settings = settings }
     }
     var dictionary: [DictionaryEntry] {
@@ -60,10 +61,28 @@ private struct GeneralTab: View {
     @Bindable var model: SettingsModel
     let onBindingsChanged: () -> Void
 
+    @State private var supportedLocales: [Locale] = []
+
     var body: some View {
         Form {
             Section("Dictation") {
-                TextField("Language (BCP-47)", text: $model.settings.defaultLanguage)
+                if supportedLocales.isEmpty {
+                    TextField("Language (BCP-47)", text: $model.settings.defaultLanguage)
+                } else {
+                    Picker("Language", selection: $model.settings.defaultLanguage) {
+                        ForEach(supportedLocales, id: \.identifier) { locale in
+                            Text(displayName(for: locale)).tag(locale.identifier(.bcp47))
+                        }
+                    }
+                    .onChange(of: model.settings.defaultLanguage) {
+                        let locale = Locale(identifier: model.settings.defaultLanguage)
+                        Task { try? await AudioTranscriber.ensureAssets(locale: locale) }
+                    }
+                }
+                TextField("Translate output to (optional, e.g. “Spanish”)",
+                          text: Binding(
+                            get: { model.settings.outputLanguage ?? "" },
+                            set: { model.settings.outputLanguage = $0.isEmpty ? nil : $0 }))
                 Toggle("Clean up transcripts with LLM", isOn: $model.settings.cleanupEnabled)
                 TextField("Ollama model", text: $model.settings.cleanupModel)
                 TextField("Ollama URL", text: $model.settings.ollamaURL)
@@ -82,10 +101,19 @@ private struct GeneralTab: View {
             }
         }
         .formStyle(.grouped)
+        .task {
+            var locales = await SpeechTranscriber.supportedLocales
+            locales.sort { displayName(for: $0) < displayName(for: $1) }
+            supportedLocales = locales
+        }
+    }
+
+    private func displayName(for locale: Locale) -> String {
+        Locale.current.localizedString(forIdentifier: locale.identifier) ?? locale.identifier
     }
 
     private var rebindableActions: [BindableAction] {
-        [.commandMode, .pasteLastTranscript, .viewDiff]
+        [.commandMode, .pasteLastTranscript, .copyLastTranscript, .viewDiff, .openScratchpad]
     }
 }
 
@@ -110,7 +138,9 @@ private struct ShortcutRow: View {
         switch action {
         case .commandMode: "Command Mode"
         case .pasteLastTranscript: "Paste Last Transcript"
+        case .copyLastTranscript: "Copy Last Transcript"
         case .viewDiff: "View Diff / Activity"
+        case .openScratchpad: "Open Scratchpad"
         default: action.rawValue
         }
     }
@@ -189,7 +219,7 @@ private struct PersonalizationTab: View {
         Form {
             Section {
                 Toggle("Auto-add to dictionary", isOn: $model.settings.autoAddDictionary)
-                Text("When you correct a word Wisprrr inserted, the corrected spelling is learned automatically. Only the field Wisprrr pasted into is checked.")
+                Text("When you correct a word Murmur inserted, the corrected spelling is learned automatically. Only the field Murmur pasted into is checked.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             Section("Dictionary — names, jargon, terms spelled exactly") {

@@ -1,5 +1,5 @@
 import Testing
-@testable import WisprrrCore
+@testable import MurmurCore
 
 @Test func pressEnterAtEndIsStrippedAndFlagged() {
     let r = TranscriptProcessor.extractPressEnter(from: "send the report today press enter")

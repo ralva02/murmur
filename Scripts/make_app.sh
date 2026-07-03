@@ -1,15 +1,16 @@
 #!/bin/bash
-# Builds Wisprrr in release mode and assembles a launchable .app bundle.
+# Builds Murmur in release mode and assembles a launchable .app bundle.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 swift build -c release
 
-APP=build/Wisprrr.app
+APP=build/Murmur.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-cp .build/release/Wisprrr "$APP/Contents/MacOS/Wisprrr"
+cp .build/release/Murmur "$APP/Contents/MacOS/Murmur"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -17,13 +18,13 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>Wisprrr</string>
+    <string>Murmur</string>
     <key>CFBundleIdentifier</key>
     <string>com.raul.wisprrr</string>
     <key>CFBundleName</key>
-    <string>Wisprrr</string>
+    <string>Murmur</string>
     <key>CFBundleDisplayName</key>
-    <string>Wisprrr</string>
+    <string>Murmur</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -32,12 +33,14 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
     <string>26.0</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Wisprrr records your voice while you hold the dictation hotkey so it can transcribe what you say.</string>
+    <string>Murmur records your voice while you hold the dictation hotkey so it can transcribe what you say.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Wisprrr transcribes your speech on-device to insert text where you're typing.</string>
+    <string>Murmur transcribes your speech on-device to insert text where you're typing.</string>
 </dict>
 </plist>
 PLIST

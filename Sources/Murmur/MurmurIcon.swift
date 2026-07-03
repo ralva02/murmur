@@ -4,7 +4,7 @@ import AppKit
 /// automatically adapt to light/dark menu bars and the "reduce transparency"
 /// setting. The motif is a four-bar whisper waveform.
 @MainActor
-enum WisprrrIcon {
+enum MurmurIcon {
 
     /// Waveform bars — idle state.
     static let idle: NSImage = makeTemplate(name: "wisprrr-idle") { rect in

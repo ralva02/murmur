@@ -1,5 +1,5 @@
 import Testing
-@testable import WisprrrCore
+@testable import MurmurCore
 
 @Test func wordDiffMarksChanges() {
     let d = WordDiff.diff(old: "um lets meet tuesday", new: "Let's meet Friday.")

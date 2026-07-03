@@ -1,6 +1,6 @@
 import AppKit
 import CoreGraphics
-import WisprrrCore
+import MurmurCore
 
 /// Global hotkey handling via a listen-only CGEventTap (spec §4.1, §4.2):
 /// - Hold Fn → push-to-talk (start on press, stop on release).

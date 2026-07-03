@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import WisprrrCore
+@testable import MurmurCore
 
 struct StubTransport: HTTPTransport {
     var handler: @Sendable (URLRequest) async throws -> (Data, Int)

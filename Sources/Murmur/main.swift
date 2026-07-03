@@ -1,5 +1,5 @@
 import Foundation
-import WisprrrCore
+import MurmurCore
 
 // Debug entry: exercises the processing pipeline (snippets, press-enter,
 // cleanup LLM) from the command line without mic/AX involvement.
@@ -13,7 +13,8 @@ if let flagIndex = CommandLine.arguments.firstIndex(of: "--process-text"),
     let exitCode: Int32 = await {
         let alive = await client.isAlive()
         let cleanup: CleanupProvider = alive
-            ? OllamaCleanupProvider(client: client, model: store.settings.cleanupModel)
+            ? OllamaCleanupProvider(client: client, model: store.settings.cleanupModel,
+                                    translateTo: store.settings.outputLanguage)
             : PassthroughCleanupProvider()
         if !alive { FileHandle.standardError.write(Data("warning: Ollama unreachable, passthrough mode\n".utf8)) }
 
@@ -35,7 +36,7 @@ if let flagIndex = CommandLine.arguments.firstIndex(of: "--process-text"),
 
 // Debug entry: waits 3 s (focus a text field somewhere), then runs the real
 // injection path. Launch as the bundle so TCC attributes it to the app:
-//   open build/Wisprrr.app --args --inject-text "hello from wisprrr"
+//   open build/Murmur.app --args --inject-text "hello from wisprrr"
 if let flagIndex = CommandLine.arguments.firstIndex(of: "--inject-text"),
    CommandLine.arguments.count > flagIndex + 1 {
     let text = CommandLine.arguments[flagIndex + 1]

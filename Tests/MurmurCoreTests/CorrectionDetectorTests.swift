@@ -1,5 +1,5 @@
 import Testing
-@testable import WisprrrCore
+@testable import MurmurCore
 
 @Test func detectsSpellingCorrection() {
     let out = CorrectionDetector.corrections(
@@ -45,8 +45,8 @@ import Testing
 @Test func ignoresKnownTerms() {
     let out = CorrectionDetector.corrections(
         inserted: "ship it to wisper today",
-        current: "ship it to Wisprrr today",
-        knownTerms: ["Wisprrr"])
+        current: "ship it to Murmur today",
+        knownTerms: ["Murmur"])
     #expect(out.isEmpty)
 }
 

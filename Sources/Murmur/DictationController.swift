@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-import WisprrrCore
+import MurmurCore
 
 /// Orchestrates a dictation session (spec §3.1): trigger → capture/ASR →
 /// pipeline → injection → history. The only stateful coordinator in the app.
@@ -57,12 +57,15 @@ final class DictationController {
         if settings.cleanupEnabled, let url = URL(string: settings.ollamaURL) {
             let client = OllamaClient(baseURL: url)
             if await client.isAlive() {
-                cleanup = OllamaCleanupProvider(client: client, model: settings.cleanupModel)
+                cleanup = OllamaCleanupProvider(
+                    client: client, model: settings.cleanupModel,
+                    translateTo: settings.outputLanguage)
                 if let context {
                     let prompt = PromptBuilder.cleanupPrompt(
                         rawTranscript: "", context: context,
                         dictionary: store.dictionary,
-                        style: store.style(for: context.appCategory))
+                        style: store.style(for: context.appCategory),
+                        translateTo: settings.outputLanguage)
                     let model = settings.cleanupModel
                     Task.detached { await client.prewarm(model: model, system: prompt.system) }
                 }
@@ -119,12 +122,9 @@ final class DictationController {
             return
         }
         guard state == .idle else { return }
-        guard let selection = ContextReader.selectedText(), !selection.isEmpty else {
-            TextInjector.notify(title: "Wisprrr",
-                body: "Command Mode: select some text first, then speak an instruction.")
-            return
-        }
-        commandSelection = selection
+        // With a selection: spoken instruction rewrites it (§8.1).
+        // Without: spoken question routes to a web search (§8.2).
+        commandSelection = ContextReader.selectedText().flatMap { $0.isEmpty ? nil : $0 }
         commandModeArmed = true
         startRecording(handsFree: true)
     }
@@ -132,6 +132,12 @@ final class DictationController {
     func pasteLastTranscript() {
         guard let last = store.history.last else { return }
         Task { await TextInjector.insert(last.finalText) }
+    }
+
+    func copyLastTranscript() {
+        guard let last = store.history.last else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(last.finalText, forType: .string)
     }
 
     func undoLastInsertion() {
@@ -158,7 +164,7 @@ final class DictationController {
         lastTriggerAt = now
 
         guard Permissions.microphoneGranted else {
-            TextInjector.notify(title: "Wisprrr",
+            TextInjector.notify(title: "Murmur",
                 body: "Microphone access is required. Grant it in System Settings.")
             Permissions.openMicrophoneSettings()
             return
@@ -167,7 +173,7 @@ final class DictationController {
         // Context is read once, at session start, and never from password fields (§6).
         sessionContext = ContextReader.read(contextAwareness: store.settings.contextAwareness)
         if sessionContext.isSecureField {
-            TextInjector.notify(title: "Wisprrr", body: "Dictation is disabled in password fields.")
+            TextInjector.notify(title: "Murmur", body: "Dictation is disabled in password fields.")
             commandModeArmed = false
             return
         }
@@ -189,7 +195,7 @@ final class DictationController {
                 Diag.dictation.error("ASR start FAILED: \(error.localizedDescription, privacy: .public)")
                 state = .idle
                 commandModeArmed = false
-                TextInjector.notify(title: "Wisprrr",
+                TextInjector.notify(title: "Murmur",
                     body: "Could not start dictation: \(error.localizedDescription)")
                 throw error
             }
@@ -223,9 +229,14 @@ final class DictationController {
             return
         }
 
-        if wasCommandMode, let selection = commandSelection {
+        if wasCommandMode {
+            let selection = commandSelection
             commandSelection = nil
-            await runCommandMode(instruction: raw, selection: selection)
+            if let selection {
+                await runCommandMode(instruction: raw, selection: selection)
+            } else {
+                routeQueryToSearch(raw)
+            }
             return
         }
 
@@ -262,6 +273,31 @@ final class DictationController {
         state = .idle
     }
 
+    /// Command Mode with no selection (§8.2): the spoken words become a web
+    /// search in the default browser.
+    private func routeQueryToSearch(_ query: String) {
+        guard let encoded = query.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "https://www.perplexity.ai/search?q=\(encoded)")
+        else {
+            state = .idle
+            return
+        }
+        Diag.dictation.notice("command mode: routing query to search")
+        NSWorkspace.shared.open(url)
+        if store.settings.historyEnabled {
+            let record = TranscriptRecord(
+                appBundleId: sessionContext.appBundleId,
+                appCategory: sessionContext.appCategory,
+                rawText: query,
+                finalText: url.absoluteString,
+                language: store.settings.defaultLanguage,
+                mode: "command")
+            store.appendHistory(record)
+            onTranscriptRecorded?(record)
+        }
+        state = .idle
+    }
+
     private func runCommandMode(instruction: String, selection: String) async {
         let settings = store.settings
         guard let url = URL(string: settings.ollamaURL) else {
@@ -289,7 +325,7 @@ final class DictationController {
                 onTranscriptRecorded?(record)
             }
         } catch {
-            TextInjector.notify(title: "Wisprrr",
+            TextInjector.notify(title: "Murmur",
                 body: "Command Mode failed: \(error.localizedDescription)")
         }
         state = .idle

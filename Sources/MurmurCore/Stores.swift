@@ -9,6 +9,11 @@ public final class AppStore: @unchecked Sendable {
 
     public static let defaultRootDirectory = FileManager.default
         .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Murmur")
+
+    /// Pre-rename data location (the app used to be called Wisprrr).
+    public static let legacyDefaultRootDirectory = FileManager.default
+        .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Wisprrr")
 
     private static let historyCap = 500
@@ -22,6 +27,20 @@ public final class AppStore: @unchecked Sendable {
     public var snippets: [Snippet]
     public var styles: [Style]
     public private(set) var history: [TranscriptRecord]
+    public private(set) var notes: [Note]
+
+    /// One-time migration from the pre-rename directory. Deliberately NOT part
+    /// of init: implicit migration in a constructor once let unit tests using
+    /// temp roots "migrate" (move!) the real user data into their sandboxes.
+    /// The app calls this exactly once at launch, before building its store.
+    public static func migrateLegacyDataIfNeeded(
+        from legacy: URL = AppStore.legacyDefaultRootDirectory,
+        to root: URL = AppStore.defaultRootDirectory
+    ) {
+        guard !FileManager.default.fileExists(atPath: root.path),
+              FileManager.default.fileExists(atPath: legacy.path) else { return }
+        try? FileManager.default.moveItem(at: legacy, to: root)
+    }
 
     public init(rootDirectory: URL = AppStore.defaultRootDirectory) {
         self.rootDirectory = rootDirectory
@@ -31,7 +50,39 @@ public final class AppStore: @unchecked Sendable {
         self.snippets = Self.load("snippets.json", from: rootDirectory) ?? []
         self.styles = Self.load("styles.json", from: rootDirectory) ?? Style.defaults
         self.history = Self.load("history.json", from: rootDirectory) ?? []
+        self.notes = Self.load("notes.json", from: rootDirectory) ?? []
+
+        // Bindings added in newer versions must appear in settings saved by
+        // older versions, or their actions are unreachable.
+        let present = Set(settings.bindings.map(\.action))
+        let missing = HotkeyBinding.defaults.filter { !present.contains($0.action) }
+        if !missing.isEmpty {
+            settings.bindings.append(contentsOf: missing)
+        }
     }
+
+    // MARK: - Notes (scratchpad)
+
+    @discardableResult
+    public func addNote(text: String) -> Note {
+        let note = Note(text: text)
+        notes.append(note)
+        saveNotes()
+        return note
+    }
+
+    public func updateNote(id: UUID, text: String) {
+        guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[index].text = text
+        saveNotes()
+    }
+
+    public func deleteNote(id: UUID) {
+        notes.removeAll { $0.id == id }
+        saveNotes()
+    }
+
+    private func saveNotes() { save(notes, to: "notes.json") }
 
     // MARK: - Personalization
 

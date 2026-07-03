@@ -1,5 +1,5 @@
 import AppKit
-import WisprrrCore
+import MurmurCore
 
 /// Menu-bar presence (spec §12): state indicator, quick actions, permission
 /// warnings, entry points to settings and recent activity.
@@ -11,15 +11,18 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private let store: AppStore
     private let openSettings: () -> Void
     private let openActivity: () -> Void
+    private let openScratchpad: () -> Void
 
     init(dictation: DictationController,
          store: AppStore,
          openSettings: @escaping () -> Void,
-         openActivity: @escaping () -> Void) {
+         openActivity: @escaping () -> Void,
+         openScratchpad: @escaping () -> Void) {
         self.dictation = dictation
         self.store = store
         self.openSettings = openSettings
         self.openActivity = openActivity
+        self.openScratchpad = openScratchpad
         super.init()
 
         let menu = NSMenu()
@@ -42,17 +45,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     func update(for state: DictationController.State) {
         let image: NSImage? = switch state {
         case .idle: Permissions.allGranted
-            ? WisprrrIcon.idle
+            ? MurmurIcon.idle
             : NSImage(systemSymbolName: "exclamationmark.triangle",
-                      accessibilityDescription: "Wisprrr needs permissions")
-        case .recording: WisprrrIcon.recording
+                      accessibilityDescription: "Murmur needs permissions")
+        case .recording: MurmurIcon.recording
         case .processing: NSImage(systemSymbolName: "hourglass",
-                                  accessibilityDescription: "Wisprrr processing")
+                                  accessibilityDescription: "Murmur processing")
         case .injecting: NSImage(systemSymbolName: "arrow.down.doc",
-                                 accessibilityDescription: "Wisprrr inserting")
+                                 accessibilityDescription: "Murmur inserting")
         }
         statusItem.button?.image = image
-        statusItem.button?.setAccessibilityLabel("Wisprrr")
+        statusItem.button?.setAccessibilityLabel("Murmur")
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -63,9 +66,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
                      action: #selector(toggleHandsFree), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Paste Last Transcript",
                      action: #selector(pasteLast), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Copy Last Transcript",
+                     action: #selector(copyLast), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Undo Last Insertion",
                      action: #selector(undoLast), keyEquivalent: "").target = self
         menu.addItem(.separator())
+        menu.addItem(withTitle: "Scratchpad…",
+                     action: #selector(showScratchpad), keyEquivalent: "n").target = self
         menu.addItem(withTitle: "Recent Activity…",
                      action: #selector(showActivity), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Settings…",
@@ -88,12 +95,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit Wisprrr",
+        menu.addItem(withTitle: "Quit Murmur",
                      action: #selector(quit), keyEquivalent: "q").target = self
     }
 
     @objc private func toggleHandsFree() { dictation.handsFreeToggle() }
     @objc private func pasteLast() { dictation.pasteLastTranscript() }
+    @objc private func copyLast() { dictation.copyLastTranscript() }
+    @objc private func showScratchpad() { openScratchpad() }
     @objc private func undoLast() { dictation.undoLastInsertion() }
     @objc private func showActivity() { openActivity() }
     @objc private func showSettings() { openSettings() }

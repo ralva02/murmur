@@ -1,6 +1,6 @@
 import AppKit
 import ApplicationServices
-import WisprrrCore
+import MurmurCore
 
 /// Reads the active app and text near the cursor via the Accessibility API
 /// (spec §6). Only invoked at the start of a dictation session; never reads
