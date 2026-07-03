@@ -97,27 +97,15 @@ final class RecordingsModel {
         allTags.map { tag in (tag, recordings.filter { $0.tag == tag }) }
     }
 
+    /// Row whose inline tag strip is open (no popups — tagging is in-row).
+    var taggingID: UUID?
+
     func setTag(_ tag: String?, for id: UUID) {
         guard var rec = recordings.first(where: { $0.id == id }) else { return }
         rec.tag = tag
         recordingsStore.update(rec)
         recordings = recordingsStore.recordings
-    }
-
-    func promptNewTag(for id: UUID) {
-        let alert = NSAlert()
-        alert.messageText = "New tag"
-        alert.informativeText = "The recording moves into this tag's section."
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
-        field.placeholderString = "e.g. Work"
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Tag")
-        alert.addButton(withTitle: "Cancel")
-        alert.window.initialFirstResponder = field
-        if alert.runModal() == .alertFirstButtonReturn {
-            let tag = field.stringValue.trimmingCharacters(in: .whitespaces)
-            if !tag.isEmpty { setTag(tag, for: id) }
-        }
+        taggingID = nil
     }
 }
 
@@ -268,6 +256,11 @@ private struct RecordingRow: View {
             }
             .buttonStyle(.plain)
 
+            if model.taggingID == recording.id {
+                TagStrip(model: model, recording: recording)
+                    .padding([.horizontal, .bottom], 14)
+            }
+
             if expanded {
                 RecordingDetail(model: model, recording: recording)
                     .padding([.horizontal, .bottom], 14)
@@ -277,35 +270,24 @@ private struct RecordingRow: View {
         .padding(.bottom, 8)
     }
 
-    /// Existing tags + "New Tag…" + "Move to Inbox" for triage.
+    /// Toggles the inline tag strip — no menus, no popups.
     private var tagMenu: some View {
-        Menu {
-            ForEach(model.allTags, id: \.self) { tag in
-                Button {
-                    model.setTag(tag, for: recording.id)
-                } label: {
-                    if recording.tag == tag {
-                        Label(tag, systemImage: "checkmark")
-                    } else {
-                        Text(tag)
-                    }
+        Button {
+            model.taggingID = model.taggingID == recording.id ? nil : recording.id
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: recording.tag == nil ? "tag" : "tag.fill")
+                    .font(.system(size: 12))
+                if let tag = recording.tag {
+                    Text(tag).font(.system(size: 11, weight: .medium))
                 }
             }
-            if !model.allTags.isEmpty { Divider() }
-            Button("New Tag…") { model.promptNewTag(for: recording.id) }
-            if recording.tag != nil {
-                Button("Move to Inbox") { model.setTag(nil, for: recording.id) }
-            }
-        } label: {
-            Image(systemName: recording.tag == nil ? "tag" : "tag.fill")
-                .font(.system(size: 12))
-                .foregroundStyle(recording.tag == nil ? Theme.inkTertiary : Theme.violet)
-                .frame(width: 26, height: 26)
-                .contentShape(Rectangle())
+            .foregroundStyle(recording.tag == nil ? Theme.inkTertiary : Theme.violet)
+            .padding(.horizontal, 8)
+            .frame(height: 26)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
         .help(recording.tag ?? "Tag this recording")
     }
 
@@ -344,6 +326,66 @@ private struct RecordingRow: View {
                     .buttonStyle(GhostButtonStyle())
             }
         }
+    }
+}
+
+/// Inline tag picker: existing tags as one-click chips, a type-to-create
+/// field, and a remove chip. Lives in the row — no popups.
+private struct TagStrip: View {
+    @Bindable var model: RecordingsModel
+    let recording: Recording
+    @State private var newTag = ""
+    @FocusState private var fieldFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(model.allTags, id: \.self) { tag in
+                Button {
+                    model.setTag(tag == recording.tag ? nil : tag, for: recording.id)
+                } label: {
+                    Text(tag)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(tag == recording.tag ? .white : Theme.ink)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(tag == recording.tag ? Theme.violet : Theme.sidebarSelection,
+                                    in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+
+            TextField("New tag…", text: $newTag)
+                .textFieldStyle(.plain)
+                .font(.system(size: 11))
+                .frame(width: 90)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Theme.canvas, in: Capsule())
+                .overlay(Capsule().strokeBorder(Theme.cardBorder, lineWidth: 1))
+                .focused($fieldFocused)
+                .onSubmit {
+                    let tag = newTag.trimmingCharacters(in: .whitespaces)
+                    if !tag.isEmpty { model.setTag(tag, for: recording.id) }
+                    newTag = ""
+                }
+
+            if recording.tag != nil {
+                Button {
+                    model.setTag(nil, for: recording.id)
+                } label: {
+                    Label("Inbox", systemImage: "tray")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.inkSecondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Theme.sidebarSelection, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .help("Move back to Inbox")
+            }
+            Spacer()
+        }
+        .onAppear { if model.allTags.isEmpty { fieldFocused = true } }
     }
 }
 
