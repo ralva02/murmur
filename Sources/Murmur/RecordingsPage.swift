@@ -320,16 +320,11 @@ private struct RecordingDetail: View {
     }
 
     private func summaryView(_ markdown: String) -> some View {
-        let attributed = (try? AttributedString(
-            markdown: markdown,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)))
-            ?? AttributedString(markdown)
-        return Text(attributed)
+        MarkdownView(markdown: markdown)
             .font(.system(size: 13))
-            .foregroundStyle(Theme.ink)
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
+            .padding(14)
             .background(Theme.canvas)
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
