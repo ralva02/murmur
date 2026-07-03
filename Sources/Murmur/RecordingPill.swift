@@ -13,18 +13,38 @@ struct PillActions {
     var currentLanguage: () -> String = { "en-US" }
 }
 
+/// The hover row's quick actions; slotX is the button center offset from the
+/// panel's horizontal center.
+enum PillQuickAction: Int, CaseIterable {
+    case language, dictate, scratchpad, settings
+
+    var slotX: CGFloat {
+        switch self {
+        case .language: -66
+        case .dictate: -22
+        case .scratchpad: 22
+        case .settings: 66
+        }
+    }
+}
+
 /// Wispr-style pill at the bottom-center of the screen: a collapsed sliver
 /// when idle, quick actions on hover, cancel · waveform · confirm while
 /// recording. A non-activating panel — it never steals focus from the app
 /// being dictated into.
+///
+/// Hover detection is deliberately AppKit-level (NSTrackingArea with
+/// .activeAlways): SwiftUI's .onHover rides on key-window-dependent tracking
+/// and fires unreliably in a non-activating panel that is never key.
 @MainActor
-final class RecordingPillController {
+final class RecordingPillController: NSObject {
 
     @Observable
     final class Model {
         enum Phase { case collapsed, hover, recording, processing }
         var phase: Phase = .collapsed
         var level: Float = 0
+        var hoveredAction: PillQuickAction?
         var actions = PillActions()
     }
 
@@ -42,14 +62,12 @@ final class RecordingPillController {
         reposition()
         panel?.orderFrontRegardless()
 
-        // Keep the collapsed sliver on whichever display the pointer is on.
-        // (Hover and recording can only start where the pill already is, so
-        // only the idle state needs to follow the mouse across screens.)
-        let timer = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, self.model.phase == .collapsed else { return }
-                self.reposition()
-            }
+        // Hover + screen-follow via a cursor-position poll. Tracking areas
+        // and SwiftUI .onHover both proved unreliable inside a non-activating
+        // panel of a background (accessory) app; polling NSEvent.mouseLocation
+        // ten times a second depends on nothing and costs nothing measurable.
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.pollMouse() }
         }
         RunLoop.main.add(timer, forMode: .common)
         followTimer = timer
@@ -65,11 +83,47 @@ final class RecordingPillController {
         case .injecting, .idle:
             model.phase = .collapsed
             model.level = 0
+            model.hoveredAction = nil
         }
     }
 
     func updateLevel(_ level: Float) {
         model.level = level
+    }
+
+    // MARK: Hover via cursor poll (see install())
+
+    private var followTick = 0
+
+    private func pollMouse() {
+        guard let panel else { return }
+        // Panel-local coordinates, origin bottom-left; (midX, 0) is the sliver spot.
+        let mouse = NSEvent.mouseLocation
+        let local = NSPoint(x: mouse.x - panel.frame.minX, y: mouse.y - panel.frame.minY)
+        let dx = local.x - panel.frame.width / 2
+
+        switch model.phase {
+        case .collapsed:
+            // Only the sliver itself (plus a small grace margin) expands.
+            if local.y >= 0 && local.y < 26 && abs(dx) < 34 {
+                model.phase = .hover
+            } else {
+                followTick += 1
+                if followTick >= 15 {   // every ~1.5 s: follow mouse across displays
+                    followTick = 0
+                    reposition()
+                }
+            }
+        case .hover:
+            if local.y < 0 || local.y > 95 || abs(dx) > 115 {
+                model.phase = .collapsed
+                model.hoveredAction = nil
+            } else if local.y < 48 {
+                model.hoveredAction = PillQuickAction.allCases.first { abs(dx - $0.slotX) <= 18 }
+            }
+        case .recording, .processing:
+            break
+        }
     }
 
     private func makePanel() -> NSPanel {
@@ -86,6 +140,7 @@ final class RecordingPillController {
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+
         panel.contentView = NSHostingView(rootView: PillView(model: model))
         return panel
     }
@@ -95,9 +150,11 @@ final class RecordingPillController {
         let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
             ?? NSScreen.main
         guard let panel, let screen else { return }
-        let frame = screen.visibleFrame
+        // Full frame, not visibleFrame: the pill hugs the true bottom edge of
+        // the screen (floating over the Dock, like Wispr), never above it.
+        let frame = screen.frame
         let size = panel.frame.size
-        let origin = NSPoint(x: frame.midX - size.width / 2, y: frame.minY + 8)
+        let origin = NSPoint(x: frame.midX - size.width / 2, y: frame.minY)
         if panel.frame.origin != origin { panel.setFrameOrigin(origin) }
     }
 }
@@ -112,21 +169,6 @@ final class RecordingPillController {
 private struct PillView: View {
     @Bindable var model: RecordingPillController.Model
     @State private var supportedLanguages: [String] = []
-    @State private var hovered: QuickAction? = nil
-
-    /// The hover row's quick actions; rawValue is the slot order.
-    enum QuickAction: Int {
-        case language, dictate, scratchpad, settings
-
-        var slotX: CGFloat {
-            switch self {
-            case .language: -66
-            case .dictate: -22
-            case .scratchpad: 22
-            case .settings: 66
-            }
-        }
-    }
 
     private var phase: RecordingPillController.Model.Phase { model.phase }
 
@@ -137,8 +179,8 @@ private struct PillView: View {
             // Explainer label — sits above the hovered button (mic by default)
             // and slides between slots.
             explainerLabel
-                .padding(.bottom, 56)
-                .offset(x: (hovered ?? .dictate).slotX)
+                .padding(.bottom, 43)   // buttons are 36 pt tall → 7 pt gap
+                .offset(x: (model.hoveredAction ?? .dictate).slotX)
                 .scaleEffect(phase == .hover ? 1 : 0.3, anchor: .bottom)
                 .opacity(phase == .hover ? 1 : 0)
                 .allowsHitTesting(false)
@@ -157,17 +199,9 @@ private struct PillView: View {
             island
         }
         .frame(width: 460, height: 130, alignment: .bottom)
-        .padding(.bottom, 6)
+        .padding(.bottom, 8)
         .animation(spring, value: phase)
-        // Exit-only: expansion is triggered by hovering the sliver itself
-        // (see island.onHover) — the surrounding invisible panel area must
-        // not pop the menu open when the pointer merely passes nearby.
-        .onHover { hovering in
-            if !hovering, phase == .hover {
-                model.phase = .collapsed
-                hovered = nil
-            }
-        }
+        .animation(spring, value: model.hoveredAction)
         .task {
             // Long-term this could come from SpeechTranscriber.supportedLocales;
             // a short curated list keeps the hover menu instant.
@@ -181,40 +215,29 @@ private struct PillView: View {
         switch phase {
         case .collapsed: CGSize(width: 44, height: 7)
         case .hover: CGSize(width: 36, height: 36)      // becomes the mic button
-        case .recording: CGSize(width: 260, height: 52)
-        case .processing: CGSize(width: 150, height: 44)
+        case .recording: CGSize(width: 110, height: 30)
+        case .processing: CGSize(width: 128, height: 34)
         }
     }
 
     /// In hover the island sits where the mic button belongs;
     /// otherwise it is centered.
-    private var islandX: CGFloat { phase == .hover ? QuickAction.dictate.slotX : 0 }
+    private var islandX: CGFloat { phase == .hover ? PillQuickAction.dictate.slotX : 0 }
 
     private var island: some View {
         Capsule()
-            // Collapsed: a lighter contrasting gray (a black sliver vanishes
-            // against dark docks/menu bars — Wispr does the same).
-            .fill(phase == .collapsed ? Color(white: 0.32).opacity(0.95) : .black.opacity(0.9))
-            .overlay(Capsule().strokeBorder(.white.opacity(phase == .collapsed ? 0.06 : 0.12), lineWidth: 0.5))
+            .fill(.black.opacity(phase == .collapsed ? 0.85 : 0.9))
+            // Wispr-style visible outline on the sliver; subtle on the rest.
+            .overlay(Capsule().strokeBorder(
+                .white.opacity(phase == .collapsed ? 0.45 : 0.12),
+                lineWidth: phase == .collapsed ? 1 : 0.5))
             .frame(width: islandSize.width, height: islandSize.height)
             .overlay(islandContent)
-            .contentShape(Capsule().inset(by: phase == .collapsed ? -10 : 0))
             .shadow(color: .black.opacity(phase == .collapsed ? 0 : 0.35),
                     radius: 14, y: 5)
             .offset(x: islandX)
             .onTapGesture {
                 if phase == .hover { model.actions.handsFreeToggle() }
-            }
-            .onHover { inside in
-                switch (inside, phase) {
-                case (true, .collapsed):
-                    model.phase = .hover
-                    hovered = nil
-                case (true, .hover):
-                    hovered = .dictate
-                default:
-                    break
-                }
             }
     }
 
@@ -228,35 +251,16 @@ private struct PillView: View {
                 .foregroundStyle(.white)
                 .transition(.opacity)
         case .recording:
-            HStack(spacing: 14) {
-                Button { model.actions.cancelDictation() } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 34, height: 34)
-                        .background(.white.opacity(0.25), in: Circle())
-                }
-                .buttonStyle(.plain)
-
-                WaveDots(level: model.level)
-
-                Button { model.actions.confirmDictation() } label: {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.black)
-                        .frame(width: 34, height: 34)
-                        .background(.white, in: Circle())
-                }
-                .buttonStyle(.plain)
-            }
-            .transition(.opacity.animation(.easeOut(duration: 0.18).delay(0.12)))
+            // Just the waveform — release Fn to insert, Esc to cancel.
+            WaveDots(level: model.level)
+                .transition(.opacity.animation(.easeOut(duration: 0.18).delay(0.12)))
         case .processing:
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 ProgressView()
-                    .controlSize(.small)
+                    .controlSize(.mini)
                     .tint(.white)
                 Text("Polishing…")
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(.white.opacity(0.85))
             }
             .transition(.opacity.animation(.easeOut(duration: 0.15).delay(0.08)))
@@ -267,17 +271,13 @@ private struct PillView: View {
 
     /// A quick-action circle that springs out from the island's hover slot,
     /// staggered per index so the row reads as a split.
-    private func satellite(_ action: QuickAction, index: Int, @ViewBuilder content: () -> some View) -> some View {
+    private func satellite(_ action: PillQuickAction, index: Int, @ViewBuilder content: () -> some View) -> some View {
         content()
             .offset(x: phase == .hover ? action.slotX : 0)
             .scaleEffect(phase == .hover ? 1 : 0.3, anchor: .center)
             .opacity(phase == .hover ? 1 : 0)
             .allowsHitTesting(phase == .hover)
             .animation(spring.delay(phase == .hover ? Double(index) * 0.04 : 0), value: phase)
-            .onHover { inside in
-                guard phase == .hover else { return }
-                if inside { hovered = action } else if hovered == action { hovered = nil }
-            }
     }
 
     private var languageMenu: some View {
@@ -339,7 +339,7 @@ private struct PillView: View {
     }
 
     private var explainerText: (String, String?) {
-        switch hovered ?? .dictate {
+        switch model.hoveredAction ?? .dictate {
         case .language: ("Language", nil)
         case .dictate: ("Dictate", "fn")
         case .scratchpad: ("Scratchpad", "⌃⌥N")
@@ -358,14 +358,14 @@ private struct WaveDots: View {
     @State private var history: [Float] = Array(repeating: 0, count: 14)
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 3.5) {
             ForEach(history.indices, id: \.self) { i in
                 Capsule()
                     .fill(.white)
-                    .frame(width: 4, height: max(4, CGFloat(history[i]) * 22))
+                    .frame(width: 3, height: max(3, CGFloat(history[i]) * 16))
             }
         }
-        .frame(height: 24)
+        .frame(height: 18)
         .onChange(of: level) {
             history.removeFirst()
             history.append(level)

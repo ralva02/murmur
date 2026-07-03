@@ -200,6 +200,7 @@ final class DictationController {
 
         sessionStartedAt = now
         state = .recording(handsFree: handsFree)
+        SoundCue.playStartHum()
 
         // Bias ASR with dictionary terms and on-screen names (spec §3.1 stage 3).
         let bias = store.dictionary.map(\.term) + sessionContext.properNouns
