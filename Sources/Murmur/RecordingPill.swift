@@ -354,12 +354,14 @@ private struct PillView: View {
     }
 }
 
-/// Mic-level-driven equalizer (the Wispr look). Runs on its own clock so it
-/// keeps breathing even when the mic level is steady — bars scroll left at
-/// 20 Hz, voice pushes them up, silence leaves a gentle idle shimmer.
+/// Mic-level-driven equalizer (the Wispr look): bars scroll left at 20 Hz,
+/// each new bar carrying the PEAK level since the last tick — sampling the
+/// instantaneous level would alias past syllables and detach the motion from
+/// the speech rhythm. No cross-bar animation: crisp steps read as real.
 private struct WaveDots: View {
     let level: Float
     @State private var history: [Float] = Array(repeating: 0, count: 14)
+    @State private var peak: Float = 0
     private let tick = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -371,10 +373,13 @@ private struct WaveDots: View {
             }
         }
         .frame(height: 18)
+        .onChange(of: level) { peak = max(peak, level) }
         .onReceive(tick) { _ in
             history.removeFirst()
-            history.append(min(level * 1.8, 1))   // real signal only
+            // sqrt lifts quiet speech into the visible range without
+            // flattening loud peaks.
+            history.append(sqrt(min(peak * 1.5, 1)))
+            peak = level
         }
-        .animation(.linear(duration: 0.05), value: history)
     }
 }

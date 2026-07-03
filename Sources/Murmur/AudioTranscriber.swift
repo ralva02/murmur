@@ -145,7 +145,9 @@ final class AudioTranscriber {
         levelSink: @escaping @Sendable (Float) -> Void
     ) {
         let micFormat = engine.inputNode.outputFormat(forBus: 0)
-        engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: micFormat) {
+        // 1024 frames ≈ 21 ms @48 kHz: level updates fast enough that the
+        // pill waveform tracks syllables instead of smearing across them.
+        engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: micFormat) {
             buffer, _ in
             if let data = buffer.floatChannelData?[0] {
                 let frames = Int(buffer.frameLength)
