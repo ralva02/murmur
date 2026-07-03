@@ -30,6 +30,7 @@ final class RecordingPillController {
 
     private var panel: NSPanel?
     private let model = Model()
+    private var followTimer: Timer?
 
     init(actions: PillActions) {
         model.actions = actions
@@ -40,11 +41,24 @@ final class RecordingPillController {
         if panel == nil { panel = makePanel() }
         reposition()
         panel?.orderFrontRegardless()
+
+        // Keep the collapsed sliver on whichever display the pointer is on.
+        // (Hover and recording can only start where the pill already is, so
+        // only the idle state needs to follow the mouse across screens.)
+        let timer = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.model.phase == .collapsed else { return }
+                self.reposition()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        followTimer = timer
     }
 
     func transition(to state: DictationController.State) {
         switch state {
         case .recording:
+            reposition()   // dictation may target a different display
             model.phase = .recording
         case .processing:
             model.phase = .processing
@@ -77,12 +91,14 @@ final class RecordingPillController {
     }
 
     private func reposition() {
-        guard let panel, let screen = NSScreen.main else { return }
+        let mouse = NSEvent.mouseLocation
+        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
+            ?? NSScreen.main
+        guard let panel, let screen else { return }
         let frame = screen.visibleFrame
         let size = panel.frame.size
-        panel.setFrameOrigin(NSPoint(
-            x: frame.midX - size.width / 2,
-            y: frame.minY + 8))
+        let origin = NSPoint(x: frame.midX - size.width / 2, y: frame.minY + 8)
+        if panel.frame.origin != origin { panel.setFrameOrigin(origin) }
     }
 }
 
@@ -96,28 +112,45 @@ final class RecordingPillController {
 private struct PillView: View {
     @Bindable var model: RecordingPillController.Model
     @State private var supportedLanguages: [String] = []
+    @State private var hovered: QuickAction? = nil
+
+    /// The hover row's quick actions; rawValue is the slot order.
+    enum QuickAction: Int {
+        case language, dictate, scratchpad, settings
+
+        var slotX: CGFloat {
+            switch self {
+            case .language: -66
+            case .dictate: -22
+            case .scratchpad: 22
+            case .settings: 66
+            }
+        }
+    }
 
     private var phase: RecordingPillController.Model.Phase { model.phase }
 
-    private var spring: Animation { .spring(response: 0.38, dampingFraction: 0.72) }
+    private var spring: Animation { .spring(response: 0.3, dampingFraction: 0.75) }
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            // "Dictate fn" label — grows up out of the island on hover.
-            dictateLabel
-                .padding(.bottom, 66)
+            // Explainer label — sits above the hovered button (mic by default)
+            // and slides between slots.
+            explainerLabel
+                .padding(.bottom, 56)
+                .offset(x: (hovered ?? .dictate).slotX)
                 .scaleEffect(phase == .hover ? 1 : 0.3, anchor: .bottom)
                 .opacity(phase == .hover ? 1 : 0)
-                .allowsHitTesting(phase == .hover)
+                .allowsHitTesting(false)
 
             // Satellite quick-action buttons — emerge from behind the island.
-            satellite(targetX: -84, index: 0) {
+            satellite(.language, index: 0) {
                 languageMenu
             }
-            satellite(targetX: 28, index: 1) {
+            satellite(.scratchpad, index: 1) {
                 circleButton("note.text") { model.actions.openScratchpad() }
             }
-            satellite(targetX: 84, index: 2) {
+            satellite(.settings, index: 2) {
                 circleButton("gearshape.fill") { model.actions.openSettings() }
             }
 
@@ -144,21 +177,23 @@ private struct PillView: View {
 
     private var islandSize: CGSize {
         switch phase {
-        case .collapsed: CGSize(width: 64, height: 10)
-        case .hover: CGSize(width: 44, height: 44)      // becomes the mic button
+        case .collapsed: CGSize(width: 44, height: 7)
+        case .hover: CGSize(width: 36, height: 36)      // becomes the mic button
         case .recording: CGSize(width: 260, height: 52)
         case .processing: CGSize(width: 150, height: 44)
         }
     }
 
-    /// In hover the island sits where the mic button belongs (slot -28);
+    /// In hover the island sits where the mic button belongs;
     /// otherwise it is centered.
-    private var islandX: CGFloat { phase == .hover ? -28 : 0 }
+    private var islandX: CGFloat { phase == .hover ? QuickAction.dictate.slotX : 0 }
 
     private var island: some View {
         Capsule()
-            .fill(.black.opacity(0.9))
-            .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
+            // Collapsed: a lighter contrasting gray (a black sliver vanishes
+            // against dark docks/menu bars — Wispr does the same).
+            .fill(phase == .collapsed ? Color(white: 0.32).opacity(0.95) : .black.opacity(0.9))
+            .overlay(Capsule().strokeBorder(.white.opacity(phase == .collapsed ? 0.06 : 0.12), lineWidth: 0.5))
             .frame(width: islandSize.width, height: islandSize.height)
             .overlay(islandContent)
             .contentShape(Capsule().scale(phase == .collapsed ? 2.2 : 1))
@@ -168,6 +203,10 @@ private struct PillView: View {
             .onTapGesture {
                 if phase == .hover { model.actions.handsFreeToggle() }
             }
+            .onHover { inside in
+                guard phase == .hover else { return }
+                if inside { hovered = .dictate }
+            }
     }
 
     @ViewBuilder private var islandContent: some View {
@@ -176,7 +215,7 @@ private struct PillView: View {
             EmptyView()
         case .hover:
             Image(systemName: "mic.fill")
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.white)
                 .transition(.opacity)
         case .recording:
@@ -219,17 +258,18 @@ private struct PillView: View {
 
     /// A quick-action circle that springs out from the island's hover slot,
     /// staggered per index so the row reads as a split.
-    private func satellite(targetX: CGFloat, index: Int, @ViewBuilder content: () -> some View) -> some View {
+    private func satellite(_ action: QuickAction, index: Int, @ViewBuilder content: () -> some View) -> some View {
         content()
-            .offset(x: phase == .hover ? targetX : islandXWhenHidden)
+            .offset(x: phase == .hover ? action.slotX : 0)
             .scaleEffect(phase == .hover ? 1 : 0.3, anchor: .center)
             .opacity(phase == .hover ? 1 : 0)
             .allowsHitTesting(phase == .hover)
-            .animation(spring.delay(phase == .hover ? Double(index) * 0.045 : 0), value: phase)
+            .animation(spring.delay(phase == .hover ? Double(index) * 0.04 : 0), value: phase)
+            .onHover { inside in
+                guard phase == .hover else { return }
+                if inside { hovered = action } else if hovered == action { hovered = nil }
+            }
     }
-
-    /// Where satellites hide: tucked behind the island's resting spot.
-    private var islandXWhenHidden: CGFloat { 0 }
 
     private var languageMenu: some View {
         Menu {
@@ -259,28 +299,43 @@ private struct PillView: View {
 
     private func circleIcon(_ symbol: String) -> some View {
         Image(systemName: symbol)
-            .font(.system(size: 14, weight: .medium))
+            .font(.system(size: 12.5, weight: .medium))
             .foregroundStyle(.white)
-            .frame(width: 44, height: 44)
+            .frame(width: 36, height: 36)
             .background(.black.opacity(0.9), in: Circle())
             .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 0.5))
             .contentShape(Circle())
     }
 
-    private var dictateLabel: some View {
-        HStack(spacing: 4) {
-            Text("Dictate")
+    /// "Polish ⌥1"-style label: name in white, shortcut in the pink-violet
+    /// gradient. Content follows whichever button is hovered.
+    private var explainerLabel: some View {
+        let (name, shortcut) = explainerText
+        return HStack(spacing: 5) {
+            Text(name)
                 .foregroundStyle(.white)
-            Text("fn")
-                .foregroundStyle(LinearGradient(
-                    colors: [Color(red: 0.9, green: 0.7, blue: 1.0), Color(red: 0.7, green: 0.5, blue: 1.0)],
-                    startPoint: .leading, endPoint: .trailing))
-                .fontWeight(.bold)
+            if let shortcut {
+                Text(shortcut)
+                    .foregroundStyle(LinearGradient(
+                        colors: [Color(red: 0.9, green: 0.7, blue: 1.0), Color(red: 0.7, green: 0.5, blue: 1.0)],
+                        startPoint: .leading, endPoint: .trailing))
+                    .fontWeight(.bold)
+            }
         }
-        .font(.system(size: 15, weight: .semibold))
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
+        .font(.system(size: 14, weight: .semibold))
+        .padding(.horizontal, 15)
+        .padding(.vertical, 8)
         .background(.black.opacity(0.92), in: Capsule())
+        .fixedSize()
+    }
+
+    private var explainerText: (String, String?) {
+        switch hovered ?? .dictate {
+        case .language: ("Language", nil)
+        case .dictate: ("Dictate", "fn")
+        case .scratchpad: ("Scratchpad", "⌃⌥N")
+        case .settings: ("Settings", nil)
+        }
     }
 
     private func displayName(_ identifier: String) -> String {
