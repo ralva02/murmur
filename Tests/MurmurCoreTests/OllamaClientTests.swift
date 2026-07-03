@@ -93,3 +93,48 @@ struct StubTransport: HTTPTransport {
     #expect(out.text == "as spoken")
     #expect(out.usedFallback)
 }
+
+// MARK: - Model pull
+
+private struct FakeLineTransport: LineStreamingTransport {
+    let linesToSend: [String]
+    func lines(_ request: URLRequest) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { c in
+            for line in linesToSend { c.yield(line) }
+            c.finish()
+        }
+    }
+}
+
+private final class EventBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [PullEvent] = []
+    var events: [PullEvent] { lock.withLock { storage } }
+    func append(_ e: PullEvent) { lock.withLock { storage.append(e) } }
+}
+
+@Test func pullParsesProgressAndCompletes() async throws {
+    let transport = FakeLineTransport(linesToSend: [
+        #"{"status":"pulling manifest"}"#,
+        #"{"status":"pulling abc123","digest":"abc123","total":100,"completed":25}"#,
+        #"{"status":"pulling abc123","digest":"abc123","total":100,"completed":100}"#,
+        #"{"status":"success"}"#,
+    ])
+    let client = OllamaClient(baseURL: URL(string: "http://127.0.0.1:11434")!)
+    let box = EventBox()
+    try await client.pull(model: "gemma4:e4b", transport: transport) { event in
+        box.append(event)   // synchronous — no race with the assertions below
+    }
+    let events = box.events
+    #expect(events.first?.status == "pulling manifest")
+    #expect(events.contains { $0.fraction == 0.25 })
+    #expect(events.last?.isSuccess == true)
+}
+
+@Test func pullThrowsOnOllamaError() async {
+    let transport = FakeLineTransport(linesToSend: [#"{"error":"no such model"}"#])
+    let client = OllamaClient(baseURL: URL(string: "http://127.0.0.1:11434")!)
+    await #expect(throws: OllamaError.self) {
+        try await client.pull(model: "nope", transport: transport) { _ in }
+    }
+}

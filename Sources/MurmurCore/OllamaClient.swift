@@ -22,6 +22,46 @@ public struct URLSessionTransport: HTTPTransport {
     }
 }
 
+// MARK: - Line-streaming transport (NDJSON endpoints; injectable for tests)
+
+public protocol LineStreamingTransport: Sendable {
+    func lines(_ request: URLRequest) -> AsyncThrowingStream<String, Error>
+}
+
+public struct URLSessionLineTransport: LineStreamingTransport {
+    public init() {}
+    public func lines(_ request: URLRequest) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                    guard status == 200 else { throw OllamaError(message: "Ollama returned HTTP \(status)") }
+                    for try await line in bytes.lines { continuation.yield(line) }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}
+
+/// One NDJSON line of /api/pull progress.
+public struct PullEvent: Sendable, Equatable, Decodable {
+    public let status: String?
+    public let completed: Int64?
+    public let total: Int64?
+    public let error: String?
+
+    public var fraction: Double? {
+        guard let completed, let total, total > 0 else { return nil }
+        return Double(completed) / Double(total)
+    }
+    public var isSuccess: Bool { status == "success" }
+}
+
 // MARK: - Ollama API client
 
 public struct OllamaError: Error, Sendable {
@@ -87,6 +127,31 @@ public struct OllamaClient: Sendable {
         request.httpMethod = "GET"
         let result = try? await transport.send(request)
         return result?.1 == 200
+    }
+
+    static func parsePullLine(_ line: String) -> PullEvent? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        return try? JSONDecoder().decode(PullEvent.self, from: Data(trimmed.utf8))
+    }
+
+    /// Downloads a model, reporting each progress event. Throws on transport
+    /// failure or an Ollama-reported error. Cancellable via task cancellation.
+    public func pull(
+        model: String,
+        transport: LineStreamingTransport = URLSessionLineTransport(),
+        onEvent: @escaping @Sendable (PullEvent) -> Void
+    ) async throws {
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/pull"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["model": model, "stream": true])
+        for try await line in transport.lines(request) {
+            try Task.checkCancellation()
+            guard let event = Self.parsePullLine(line) else { continue }
+            if let message = event.error { throw OllamaError(message: message) }
+            onEvent(event)
+        }
     }
 
     /// Small models sometimes wrap output in markdown fences despite instructions.
