@@ -22,9 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeys: HotkeyListener!
     private var statusController: StatusItemController!
     private var pill: RecordingPillController!
-    private var settingsWindow: NSWindow?
-    private var activityWindow: NSWindow?
-    private var scratchpadWindow: NSWindow?
+    private var mainWindow: NSWindow?
+    private var mainModel: MainModel?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Diag.app.notice("launch: accessibility=\(Permissions.accessibilityTrusted) inputMonitoring=\(Permissions.inputMonitoringGranted) microphone=\(Permissions.microphoneGranted)")
@@ -94,59 +93,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Opening Murmur.app while it's already running lands here: always show
     /// a window so "the app is not opening" can't happen silently.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        showSettings()
+        showMain(.home)
         return true
     }
 
-    func showSettings() {
-        if settingsWindow == nil {
+    func showMain(_ section: MainSection) {
+        if mainWindow == nil {
+            let model = MainModel(store: store, dictation: dictation) { [weak self] in
+                guard let self else { return }
+                self.hotkeys.bindings = self.store.settings.bindings
+            }
+            mainModel = model
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 620, height: 460),
-                styleMask: [.titled, .closable, .miniaturizable],
+                contentRect: NSRect(x: 0, y: 0, width: 1060, height: 680),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                 backing: .buffered, defer: false)
-            window.title = "Murmur Settings"
+            window.title = "Murmur"
+            // Theme is a fixed light palette; without this, dark mode renders
+            // semantic colors (TextField text, placeholders) white-on-white.
+            window.appearance = NSAppearance(named: .aqua)
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(
-                rootView: SettingsView(store: store, onBindingsChanged: { [weak self] in
-                    guard let self else { return }
-                    self.hotkeys.bindings = self.store.settings.bindings
-                }))
+            window.backgroundColor = NSColor(Theme.canvas)
+            window.contentView = NSHostingView(rootView: MainView(model: model))
             window.center()
-            settingsWindow = window
+            mainWindow = window
         }
-        settingsWindow?.makeKeyAndOrderFront(nil)
+        mainModel?.section = section
+        mainWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func showScratchpad() {
-        if scratchpadWindow == nil {
-            let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 640, height: 440),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable],
-                backing: .buffered, defer: false)
-            window.title = "Murmur — Scratchpad"
-            window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: ScratchpadView(store: store))
-            window.center()
-            scratchpadWindow = window
-        }
-        scratchpadWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
-    func showActivity() {
-        if activityWindow == nil {
-            let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
-                styleMask: [.titled, .closable, .miniaturizable, .resizable],
-                backing: .buffered, defer: false)
-            window.title = "Murmur — Recent Activity"
-            window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: ActivityView(store: store, dictation: dictation))
-            window.center()
-            activityWindow = window
-        }
-        activityWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-    }
+    func showSettings() { showMain(.settings) }
+    func showScratchpad() { showMain(.scratchpad) }
+    func showActivity() { showMain(.home) }
 }

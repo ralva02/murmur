@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import SwiftUI
 import MurmurCore
 
 // Debug entry: exercises the processing pipeline (snippets, press-enter,
@@ -48,6 +50,33 @@ if let flagIndex = CommandLine.arguments.firstIndex(of: "--inject-text"),
         return result.inserted
     }()
     exit(ok ? 0 : 1)
+}
+
+// Debug entry: renders every dashboard page to PNGs for design review —
+// no window and no screen-recording permission needed.
+//   swift run Murmur --snapshot /tmp/shots
+if let flagIndex = CommandLine.arguments.firstIndex(of: "--snapshot"),
+   CommandLine.arguments.count > flagIndex + 1 {
+    let dir = URL(fileURLWithPath: CommandLine.arguments[flagIndex + 1])
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    await MainActor.run {
+        let store = AppStore()
+        let model = MainModel(store: store, dictation: nil) {}
+        for section in MainSection.allCases {
+            model.section = section
+            let renderer = ImageRenderer(content: MainView(model: model)
+                .frame(width: 1060, height: 680))
+            renderer.scale = 2
+            guard let image = renderer.nsImage,
+                  let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else { continue }
+            let file = dir.appendingPathComponent("\(section.rawValue.lowercased()).png")
+            try? png.write(to: file)
+            print("wrote \(file.path)")
+        }
+    }
+    exit(0)
 }
 
 // App mode (menu bar shell) is wired up in AppMain.
