@@ -3,6 +3,33 @@ import Foundation
 import SwiftUI
 import MurmurCore
 
+// Debug entry: run a transcript through the summary engine + title/task
+// extraction, no mic/AX. Verifies the Recordings core against a live model.
+//   swift run Murmur --summarize "Priya will prep the deck. Book the room."
+if let flagIndex = CommandLine.arguments.firstIndex(of: "--summarize"),
+   CommandLine.arguments.count > flagIndex + 1 {
+    let transcript = CommandLine.arguments[flagIndex + 1]
+    let store = AppStore()
+    let s = store.settings
+    let provider: SummaryProvider = OllamaSummaryProvider(
+        client: OllamaClient(baseURL: URL(string: s.ollamaURL)!), model: s.cleanupModel)
+    let exit: Int32 = await {
+        do {
+            let raw = try await provider.summarize(transcript: transcript, template: .auto)
+            let parsed = SummaryOutput.parse(raw)
+            print("TITLE: \(parsed.title ?? "<none>")")
+            print("--- body ---\n\(parsed.body)")
+            print("--- tasks ---")
+            for t in TaskExtractor.parse(parsed.body) { print("  • \(t.title)  →  \(t.assignee)") }
+            return 0
+        } catch {
+            print("summarize failed: \(error)")
+            return 1
+        }
+    }()
+    Foundation.exit(exit)
+}
+
 // Debug entry: exercises the processing pipeline (snippets, press-enter,
 // cleanup LLM) from the command line without mic/AX involvement.
 //   wisprrr --process-text "um so lets meet tuesday wait no friday"

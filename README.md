@@ -29,8 +29,10 @@ punctuation inferred, tone matched to the app you're dictating into.
 
 - 🎙️ **Hold Fn, speak, release** — text appears at your cursor in any app
 - 📼 **Recordings** — capture meetings (mic + system audio) or import Plaud
-  exports; on-device transcription and local AI summaries, with an optional
-  Claude API engine for higher quality
+  exports; on-device transcription and local AI summaries (Ollama, LM Studio,
+  or Claude), each auto-titled from its content
+- ✅ **Tasks** — action items are pulled from recordings; you confirm the
+  owners in a quick review, and they land in a built-in to-do list
 - 🧠 **LLM polish, fully local** — Apple Intelligence out of the box, or a
   local [Ollama](https://ollama.com) model for the best quality
 - 🔒 **Private by construction** — on-device speech recognition, on-device
