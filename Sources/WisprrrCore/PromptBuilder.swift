@@ -36,6 +36,9 @@ public enum PromptBuilder {
         }
         if let style {
             lines.append("Tone: \(style.tone). Match it without changing the message.")
+            if !style.sample.isEmpty {
+                lines.append("Example of this user's writing in this context — match its voice, not its content:\n\(style.sample)")
+            }
         }
         if context.appCategory == .code || context.appCategory == .terminal {
             lines.append("This is a coding context: preserve identifier casing such as camelCase and snake_case, file names, and technical terms verbatim.")

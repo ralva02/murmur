@@ -37,6 +37,8 @@ final class DictationController {
     /// Debounce window against rapid start/stop toggling (spec §17).
     private let debounceInterval: TimeInterval = 0.20
 
+    private lazy var autoDictionary = AutoDictionaryMonitor(store: store)
+
     init(store: AppStore) {
         self.store = store
         transcriber.onPartial = { [weak self] text in
@@ -241,6 +243,9 @@ final class DictationController {
         Diag.dictation.notice("pipeline: \(output.textToInsert.count) chars (fallback=\(output.usedFallback)) → inserted=\(result.inserted) clipboard=\(result.fellBackToClipboard)")
         if output.pressEnter && result.inserted && !result.fellBackToClipboard {
             TextInjector.pressEnter()
+        }
+        if result.inserted && !result.fellBackToClipboard && !output.textToInsert.isEmpty {
+            autoDictionary.watch(insertedText: output.textToInsert)
         }
 
         if store.settings.historyEnabled {

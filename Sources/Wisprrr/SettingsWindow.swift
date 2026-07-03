@@ -187,6 +187,11 @@ private struct PersonalizationTab: View {
 
     var body: some View {
         Form {
+            Section {
+                Toggle("Auto-add to dictionary", isOn: $model.settings.autoAddDictionary)
+                Text("When you correct a word Wisprrr inserted, the corrected spelling is learned automatically. Only the field Wisprrr pasted into is checked.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
             Section("Dictionary — names, jargon, terms spelled exactly") {
                 ForEach(model.dictionary.indices, id: \.self) { i in
                     HStack {
@@ -234,10 +239,16 @@ private struct PersonalizationTab: View {
             }
             Section("Styles — tone per app category (English, desktop)") {
                 ForEach(model.styles.indices, id: \.self) { i in
-                    HStack {
-                        Text(model.styles[i].appCategory.rawValue.capitalized)
-                            .frame(width: 90, alignment: .leading)
-                        TextField("Tone", text: $model.styles[i].tone)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(model.styles[i].appCategory.rawValue.capitalized)
+                                .frame(width: 90, alignment: .leading)
+                            TextField("Tone", text: $model.styles[i].tone)
+                        }
+                        TextField("Example of how you write here (optional — strongest tone signal)",
+                                  text: $model.styles[i].sample, axis: .vertical)
+                            .lineLimit(1...3)
+                            .font(.callout)
                     }
                 }
             }

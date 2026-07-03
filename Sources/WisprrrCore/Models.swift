@@ -117,10 +117,21 @@ public struct Snippet: Codable, Sendable, Equatable {
 public struct Style: Codable, Sendable, Equatable {
     public var appCategory: AppCategory
     public var tone: String
+    /// Optional example of the user's own writing in this context; injected
+    /// into the cleanup prompt as a few-shot style exemplar.
+    public var sample: String
 
-    public init(appCategory: AppCategory, tone: String) {
+    public init(appCategory: AppCategory, tone: String, sample: String = "") {
         self.appCategory = appCategory
         self.tone = tone
+        self.sample = sample
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        appCategory = try container.decode(AppCategory.self, forKey: .appCategory)
+        tone = try container.decode(String.self, forKey: .tone)
+        sample = try container.decodeIfPresent(String.self, forKey: .sample) ?? ""
     }
 
     public static let defaults: [Style] = [

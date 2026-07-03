@@ -78,10 +78,18 @@ Source spec: `docs/wispr-flow-spec.md`
 - [ ] Insertion into an unsupported field → clipboard + notification, nothing lost.
 - [ ] Network disabled → dictation still works end-to-end (all local).
 
+## Personalization that compounds
+
+- **Auto-add to dictionary** (Settings → Personalization): correct a word
+  Wisprrr inserted and the corrected spelling is learned automatically — it
+  then biases both recognition and the cleanup pass.
+- **Style samples**: paste an example of how you actually write per app
+  category; it's injected into the cleanup prompt as a few-shot exemplar
+  (a much stronger tone signal than the tone adjective).
+
 ## Known limitations (v1)
 
-- Auto-add-to-dictionary (spec §7.1) and Command Mode query routing (§8.2) are
-  not implemented.
+- Command Mode query routing (§8.2) is not implemented.
 - Undo forwards ⌘Z to the target app (relies on its undo stack).
 - One language per session (the `defaultLanguage` setting); no mid-sentence
   language switching.

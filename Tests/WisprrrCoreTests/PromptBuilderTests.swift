@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import WisprrrCore
 
@@ -39,4 +40,19 @@ import Testing
     #expect(p.user.contains("some long text"))
     #expect(p.user.contains("make this more concise"))
     #expect(p.system.contains("Return only the rewritten text"))
+}
+
+@Test func cleanupPromptIncludesStyleSample() {
+    var style = Style(appCategory: .email, tone: "warm")
+    style.sample = "Hey team — quick update: shipping is on track. More soon!"
+    let p = PromptBuilder.cleanupPrompt(rawTranscript: "hi", context: .empty, dictionary: [], style: style)
+    #expect(p.system.contains("shipping is on track"))
+    #expect(p.system.contains("match its voice"))
+}
+
+@Test func styleDecodesWithoutSampleKey() throws {
+    let legacy = #"{"appCategory":"email","tone":"warm"}"#
+    let style = try JSONDecoder().decode(Style.self, from: Data(legacy.utf8))
+    #expect(style.sample.isEmpty)
+    #expect(style.tone == "warm")
 }
