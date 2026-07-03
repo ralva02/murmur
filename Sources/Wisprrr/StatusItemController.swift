@@ -32,6 +32,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
     }
 
+    /// On notched MacBooks, status items that don't fit to the right of the
+    /// notch are silently not rendered. Detectable: the button's window sits
+    /// left of the top-right auxiliary area.
+    var isHiddenByNotch: Bool {
+        guard let window = statusItem.button?.window,
+              let screen = window.screen ?? NSScreen.main,
+              let rightArea = screen.auxiliaryTopRightArea
+        else { return false }   // no notch on this screen
+        return window.frame.minX < rightArea.minX
+    }
+
     private func update(for state: DictationController.State) {
         let (symbol, description): (String, String) = switch state {
         case .idle: Permissions.allGranted

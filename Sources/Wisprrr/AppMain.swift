@@ -64,6 +64,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Pre-download speech model assets so first dictation is instant.
         let locale = Locale(identifier: store.settings.defaultLanguage)
         Task { try? await AudioTranscriber.ensureAssets(locale: locale) }
+
+        // If the menu bar is so full that our icon lands behind the notch,
+        // the app looks like it never opened. Give it a visible surface.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self, self.statusController.isHiddenByNotch else { return }
+            TextInjector.notify(title: "Wisprrr is running",
+                body: "Its menu bar icon is hidden behind the notch. Remove or ⌘-drag other menu bar icons to make room. Hold Fn to dictate — dictation works regardless.")
+            self.showSettings()
+        }
+    }
+
+    /// Opening Wisprrr.app while it's already running lands here: always show
+    /// a window so "the app is not opening" can't happen silently.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        showSettings()
+        return true
     }
 
     func showSettings() {
