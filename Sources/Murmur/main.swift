@@ -10,15 +10,28 @@ if let flagIndex = CommandLine.arguments.firstIndex(of: "--process-text"),
    CommandLine.arguments.count > flagIndex + 1 {
     let raw = CommandLine.arguments[flagIndex + 1]
     let store = AppStore()
-    let client = OllamaClient(baseURL: URL(string: store.settings.ollamaURL)!)
 
     let exitCode: Int32 = await {
-        let alive = await client.isAlive()
-        let cleanup: CleanupProvider = alive
-            ? OllamaCleanupProvider(client: client, model: store.settings.cleanupModel,
-                                    translateTo: store.settings.outputLanguage)
-            : PassthroughCleanupProvider()
-        if !alive { FileHandle.standardError.write(Data("warning: Ollama unreachable, passthrough mode\n".utf8)) }
+        let settings = store.settings
+        let cleanup: CleanupProvider
+        switch settings.cleanupEngine {
+        case .appleIntelligence where AppleIntelligenceStatus.current() == .ready:
+            cleanup = AppleIntelligenceCleanupProvider(translateTo: settings.outputLanguage)
+            print("engine:     appleIntelligence")
+        case .ollama:
+            let client = OllamaClient(baseURL: URL(string: settings.ollamaURL)!)
+            if await client.isAlive() {
+                cleanup = OllamaCleanupProvider(client: client, model: settings.cleanupModel,
+                                                translateTo: settings.outputLanguage)
+                print("engine:     ollama (\(settings.cleanupModel))")
+            } else {
+                cleanup = PassthroughCleanupProvider()
+                print("engine:     passthrough (Ollama unreachable)")
+            }
+        default:
+            cleanup = PassthroughCleanupProvider()
+            print("engine:     passthrough (Apple Intelligence unavailable: \(AppleIntelligenceStatus.current()))")
+        }
 
         let pipeline = DictationPipeline(
             cleanup: cleanup,

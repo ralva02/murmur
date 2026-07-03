@@ -75,17 +75,36 @@ struct SettingsPage: View {
 
             section("Cleanup") {
                 toggleRow("Polish transcripts with the local LLM", isOn: $model.settings.cleanupEnabled)
-                labeledRow("Ollama model") {
-                    TextField("model", text: $model.settings.cleanupModel)
-                        .textFieldStyle(.plain)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 220)
+                labeledRow("Engine") {
+                    Picker("", selection: $model.settings.cleanupEngine) {
+                        Text("Apple Intelligence").tag(CleanupEngine.appleIntelligence)
+                        Text("Ollama").tag(CleanupEngine.ollama)
+                    }
+                    .labelsHidden()
+                    .frame(width: 220)
                 }
-                labeledRow("Ollama URL") {
-                    TextField("url", text: $model.settings.ollamaURL)
-                        .textFieldStyle(.plain)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 220)
+                if model.settings.cleanupEngine == .appleIntelligence {
+                    HStack {
+                        Text(AppleIntelligenceStatus.current().explanation)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.inkSecondary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                } else {
+                    labeledRow("Ollama model") {
+                        TextField("model", text: $model.settings.cleanupModel)
+                            .textFieldStyle(.plain)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 220)
+                    }
+                    labeledRow("Ollama URL") {
+                        TextField("url", text: $model.settings.ollamaURL)
+                            .textFieldStyle(.plain)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 220)
+                    }
                 }
             }
 

@@ -54,20 +54,35 @@ final class DictationController {
     private func makePipeline(prewarmFor context: ContextPayload?) async -> DictationPipeline {
         let settings = store.settings
         var cleanup: CleanupProvider = PassthroughCleanupProvider()
-        if settings.cleanupEnabled, let url = URL(string: settings.ollamaURL) {
-            let client = OllamaClient(baseURL: url)
-            if await client.isAlive() {
-                cleanup = OllamaCleanupProvider(
-                    client: client, model: settings.cleanupModel,
-                    translateTo: settings.outputLanguage)
-                if let context {
-                    let prompt = PromptBuilder.cleanupPrompt(
-                        rawTranscript: "", context: context,
-                        dictionary: store.dictionary,
-                        style: store.style(for: context.appCategory),
-                        translateTo: settings.outputLanguage)
-                    let model = settings.cleanupModel
-                    Task.detached { await client.prewarm(model: model, system: prompt.system) }
+        if settings.cleanupEnabled {
+            switch settings.cleanupEngine {
+            case .appleIntelligence:
+                if AppleIntelligenceStatus.current() == .ready {
+                    cleanup = AppleIntelligenceCleanupProvider(translateTo: settings.outputLanguage)
+                    if let context {
+                        AppleIntelligenceCleanupProvider.prewarm(
+                            context: context, dictionary: store.dictionary,
+                            style: store.style(for: context.appCategory),
+                            translateTo: settings.outputLanguage)
+                    }
+                }
+            case .ollama:
+                if let url = URL(string: settings.ollamaURL) {
+                    let client = OllamaClient(baseURL: url)
+                    if await client.isAlive() {
+                        cleanup = OllamaCleanupProvider(
+                            client: client, model: settings.cleanupModel,
+                            translateTo: settings.outputLanguage)
+                        if let context {
+                            let prompt = PromptBuilder.cleanupPrompt(
+                                rawTranscript: "", context: context,
+                                dictionary: store.dictionary,
+                                style: store.style(for: context.appCategory),
+                                translateTo: settings.outputLanguage)
+                            let model = settings.cleanupModel
+                            Task.detached { await client.prewarm(model: model, system: prompt.system) }
+                        }
+                    }
                 }
             }
         }
