@@ -1,19 +1,55 @@
+<div align="center">
+
+<img src="docs/assets/icon-256.png" width="128" alt="Murmur icon">
+
 # Murmur
 
-A free, fully local, single-user voice-to-text layer for macOS — a personal
-[Wispr Flow](docs/wispr-flow-spec.md) clone. Hold a hotkey, speak naturally, and
-cleaned, punctuated, context-appropriate text is inserted at the cursor in
-whatever app is focused. Nothing leaves your Mac.
+**Speak it. Murmur types it.**
 
-- **ASR:** Apple's on-device `SpeechAnalyzer`/`SpeechTranscriber` (macOS 26+),
-  biased with your dictionary and on-screen proper nouns.
-- **Cleanup:** a local LLM applies the minimal-edit cleanup contract — fillers
-  removed, punctuation inferred, self-corrections resolved ("let's meet
-  Tuesday, wait no, Friday" → "Let's meet Friday"), tone matched to the app
-  category. Apple Intelligence out of the box; a local Ollama model (default
-  `gemma4:e4b`) as the higher-quality upgrade.
-- **Insertion:** Accessibility API with retry, synthetic-paste fallback, and
-  clipboard + notification as the last resort — dictation is never lost.
+Hold a key, talk naturally, and polished text lands wherever your cursor is —
+in any app. 100% on-device: your voice never leaves your Mac.
+
+![macOS 26+](https://img.shields.io/badge/macOS-26%2B-black)
+![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-native-black)
+![Swift 6](https://img.shields.io/badge/Swift-6-F05138)
+![Local only](https://img.shields.io/badge/privacy-100%25%20local-6E43D1)
+
+<img src="docs/assets/dashboard.png" width="760" alt="Murmur dashboard">
+
+</div>
+
+---
+
+## Why Murmur
+
+You talk ~4× faster than you type. Murmur turns that into usable text — not a
+raw transcript. Say *"um so let's meet tuesday, wait no, friday"* and get
+**"Let's meet Friday."**: fillers dropped, self-corrections resolved,
+punctuation inferred, tone matched to the app you're dictating into.
+
+- 🎙️ **Hold Fn, speak, release** — text appears at your cursor in any app
+- 🧠 **LLM polish, fully local** — Apple Intelligence out of the box, or a
+  local [Ollama](https://ollama.com) model for the best quality
+- 🔒 **Private by construction** — on-device speech recognition, on-device
+  cleanup, no network calls, no accounts, no telemetry
+- 📚 **Learns your words** — dictionary, auto-learned spellings from your
+  corrections, snippets ("my email address" → you@example.com), per-app tone
+- ⚡ **Fast** — ~0.4 s from key-release to inserted text (warm)
+
+## The pill
+
+A quiet lozenge sits at the bottom of whichever screen your pointer is on.
+Hover it and it splits, Dynamic-Island style, into quick actions — each one
+explains itself. While you dictate it morphs into a live waveform with
+cancel / confirm.
+
+<div align="center">
+
+| Hover | Explainers | Recording |
+|:---:|:---:|:---:|
+| <img src="docs/assets/pill-hover.png" height="90"> | <img src="docs/assets/pill-explainer.png" height="90"> | <img src="docs/assets/pill-recording.png" height="90"> |
+
+</div>
 
 ## Install
 
@@ -22,38 +58,25 @@ whatever app is focused. Nothing leaves your Mac.
 3. **Right-click → Open** the first time (Murmur isn't notarized; macOS blocks
    double-click opens of unidentified apps — right-click bypasses this once,
    permanently).
-4. Follow the in-app setup: it walks you through the three permissions and
-   picks a cleanup engine. With Apple Intelligence available, dictation is
-   polished out of the box; installing [Ollama](https://ollama.com) later
-   upgrades quality (Settings → Cleanup).
+4. Follow the in-app setup. It walks you through the three permissions,
+   picks a cleanup engine, and ends with your first dictation.
 
-## Requirements
+<div align="center">
+<img src="docs/assets/onboarding-welcome.png" width="700" alt="Onboarding welcome">
+<br><br>
+<img src="docs/assets/onboarding-cleanup.png" width="700" alt="Cleanup engine choice">
+</div>
+
+### Requirements
 
 - macOS 26+ on Apple Silicon
 - For cleanup, one of:
   - **Apple Intelligence** enabled (zero setup — the default for new installs)
-  - **[Ollama](https://ollama.com)** with the cleanup model:
-    `ollama pull gemma4:e4b` (best quality; the in-app setup can download the
-    model for you)
+  - **[Ollama](https://ollama.com)** with the cleanup model
+    (`ollama pull gemma4:e4b`) — best quality; the in-app setup can download
+    the model for you
 
   Without either, Murmur still works — it inserts the raw on-device transcript.
-
-## Build & run
-
-```bash
-bash Scripts/make_app.sh     # builds build/Murmur.app
-open build/Murmur.app
-```
-
-First run: grant the three permissions when prompted (all re-grantable later
-from the menu-bar icon):
-
-1. **Microphone** — to hear you.
-2. **Accessibility** — to insert text at the cursor and read the focused field.
-3. **Input Monitoring** — to see the Fn key globally.
-
-The first dictation may download the on-device speech model (system-managed,
-one-time).
 
 ## Usage
 
@@ -70,33 +93,9 @@ one-time).
 | "press enter" | say it at the very end of a dictation to submit (Slack, chat, etc.) |
 
 Settings (menu bar → Settings…): language (picker of all on-device speech
-locales), optional translation of output into another language, Ollama
-model/URL, shortcuts, dictionary, snippets ("my email address" → your@email),
-per-app-category tone + writing samples, context awareness, history.
-
-## Development
-
-```bash
-swift test                                        # unit tests (MurmurCore)
-swift run Murmur --process-text "some raw text"  # pipeline smoke test, no mic/AX
-```
-
-Design doc: `docs/superpowers/specs/2026-07-03-wisprrr-design.md` ·
-Plan: `docs/superpowers/plans/2026-07-03-wisprrr.md` ·
-Source spec: `docs/wispr-flow-spec.md`
-
-## Manual acceptance checklist (spec §19)
-
-- [ ] Rambling sentence with "um"/false starts in Mail → clean, punctuated paragraph at cursor.
-- [ ] "let's meet Tuesday, wait no, Friday" → "Let's meet Friday." *(verified via `--process-text`)*
-- [ ] Dictate into Slack ending with "press enter" → message sent, no stray text/punctuation.
-- [ ] Name visible on screen → spelled correctly (contextual-strings biasing).
-- [ ] Select paragraph, ⌃⌥C, "turn this into bullet points" → selection replaced.
-- [ ] Variable name in VS Code → camelCase/snake_case preserved.
-- [ ] Whispered sentence in a quiet room → still transcribes.
-- [ ] Quit and relaunch → permissions persist, dictation works.
-- [ ] Insertion into an unsupported field → clipboard + notification, nothing lost.
-- [ ] Network disabled → dictation still works end-to-end (all local).
+locales), optional translation of output into another language, cleanup
+engine, Ollama model/URL, shortcuts, dictionary, snippets, per-app-category
+tone + writing samples, context awareness, history.
 
 ## Personalization that compounds
 
@@ -107,10 +106,42 @@ Source spec: `docs/wispr-flow-spec.md`
   category; it's injected into the cleanup prompt as a few-shot exemplar
   (a much stronger tone signal than the tone adjective).
 
-## Known limitations (v1)
+## How it works
+
+1. **Capture** — AVAudioEngine streams your mic to Apple's on-device
+   `SpeechAnalyzer`/`SpeechTranscriber`, biased with your dictionary and
+   on-screen proper nouns.
+2. **Polish** — a local LLM applies a strict minimal-edit contract: your
+   words, cleaned — never rewritten, never invented. A sanity guard falls
+   back to the raw transcript if the model goes off-script.
+3. **Insert** — Accessibility API with retries, synthetic-paste fallback, and
+   clipboard + notification as the last resort. Dictation is never lost.
+
+## Build from source
+
+```bash
+bash Scripts/make_app.sh          # release build + signed build/Murmur.app
+open build/Murmur.app
+swift test                        # unit tests (MurmurCore)
+swift run Murmur --process-text "some raw text"   # pipeline smoke test, no mic
+bash Scripts/make_release.sh 0.2.0                # distributable zip
+```
+
+Design docs live in `docs/superpowers/specs/` ·
+Source spec: `docs/wispr-flow-spec.md`
+
+## Known limitations
 
 - Undo forwards ⌘Z to the target app (relies on its undo stack).
 - One language per session (pick it in Settings); no mid-sentence language
   switching or auto-detect — Apple's on-device transcriber is single-locale.
 - Custom (non-standard) password fields may not be detected as secure — same
   documented limitation as the original.
+- Not notarized (no Apple Developer Program) — hence the right-click-open
+  dance on first launch.
+
+---
+
+<div align="center">
+<sub>A personal, fully local clone of <a href="https://wisprflow.ai">Wispr Flow</a>, built for fun. Not affiliated.</sub>
+</div>

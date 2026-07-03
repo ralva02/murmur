@@ -159,11 +159,13 @@ private struct PillView: View {
         .frame(width: 460, height: 130, alignment: .bottom)
         .padding(.bottom, 6)
         .animation(spring, value: phase)
+        // Exit-only: expansion is triggered by hovering the sliver itself
+        // (see island.onHover) — the surrounding invisible panel area must
+        // not pop the menu open when the pointer merely passes nearby.
         .onHover { hovering in
-            switch (hovering, phase) {
-            case (true, .collapsed): model.phase = .hover
-            case (false, .hover): model.phase = .collapsed
-            default: break
+            if !hovering, phase == .hover {
+                model.phase = .collapsed
+                hovered = nil
             }
         }
         .task {
@@ -196,7 +198,7 @@ private struct PillView: View {
             .overlay(Capsule().strokeBorder(.white.opacity(phase == .collapsed ? 0.06 : 0.12), lineWidth: 0.5))
             .frame(width: islandSize.width, height: islandSize.height)
             .overlay(islandContent)
-            .contentShape(Capsule().scale(phase == .collapsed ? 2.2 : 1))
+            .contentShape(Capsule().inset(by: phase == .collapsed ? -10 : 0))
             .shadow(color: .black.opacity(phase == .collapsed ? 0 : 0.35),
                     radius: 14, y: 5)
             .offset(x: islandX)
@@ -204,8 +206,15 @@ private struct PillView: View {
                 if phase == .hover { model.actions.handsFreeToggle() }
             }
             .onHover { inside in
-                guard phase == .hover else { return }
-                if inside { hovered = .dictate }
+                switch (inside, phase) {
+                case (true, .collapsed):
+                    model.phase = .hover
+                    hovered = nil
+                case (true, .hover):
+                    hovered = .dictate
+                default:
+                    break
+                }
             }
     }
 
