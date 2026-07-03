@@ -66,7 +66,7 @@ final class RecordingPillController: NSObject {
         // and SwiftUI .onHover both proved unreliable inside a non-activating
         // panel of a background (accessory) app; polling NSEvent.mouseLocation
         // ten times a second depends on nothing and costs nothing measurable.
-        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in self?.pollMouse() }
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -109,7 +109,7 @@ final class RecordingPillController: NSObject {
                 model.phase = .hover
             } else {
                 followTick += 1
-                if followTick >= 15 {   // every ~1.5 s: follow mouse across displays
+                if followTick >= 30 {   // every ~1.5 s: follow mouse across displays
                     followTick = 0
                     reposition()
                 }
@@ -184,6 +184,9 @@ private struct PillView: View {
                 .scaleEffect(phase == .hover ? 1 : 0.3, anchor: .bottom)
                 .opacity(phase == .hover ? 1 : 0)
                 .allowsHitTesting(false)
+                // Faster than the satellites: the label must feel glued to
+                // the pointer as it skips between buttons.
+                .animation(.spring(response: 0.2, dampingFraction: 0.85), value: model.hoveredAction)
 
             // Satellite quick-action buttons — emerge from behind the island.
             satellite(.language, index: 0) {
@@ -201,7 +204,6 @@ private struct PillView: View {
         .frame(width: 460, height: 130, alignment: .bottom)
         .padding(.bottom, 8)
         .animation(spring, value: phase)
-        .animation(spring, value: model.hoveredAction)
         .task {
             // Long-term this could come from SpeechTranscriber.supportedLocales;
             // a short curated list keeps the hover menu instant.
@@ -352,10 +354,13 @@ private struct PillView: View {
     }
 }
 
-/// Mic-level-driven dotted waveform (the Wispr look).
+/// Mic-level-driven equalizer (the Wispr look). Runs on its own clock so it
+/// keeps breathing even when the mic level is steady — bars scroll left at
+/// 20 Hz, voice pushes them up, silence leaves a gentle idle shimmer.
 private struct WaveDots: View {
     let level: Float
     @State private var history: [Float] = Array(repeating: 0, count: 14)
+    private let tick = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
     var body: some View {
         HStack(spacing: 3.5) {
@@ -366,10 +371,11 @@ private struct WaveDots: View {
             }
         }
         .frame(height: 18)
-        .onChange(of: level) {
+        .onReceive(tick) { _ in
+            let idle = Float.random(in: 0.12...0.30)
             history.removeFirst()
-            history.append(level)
+            history.append(max(min(level * 1.8, 1), idle))
         }
-        .animation(.linear(duration: 0.08), value: history)
+        .animation(.linear(duration: 0.05), value: history)
     }
 }
