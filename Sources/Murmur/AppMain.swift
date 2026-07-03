@@ -39,13 +39,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             openActivity: { [weak self] in self?.showActivity() },
             openScratchpad: { [weak self] in self?.showScratchpad() })
 
-        pill = RecordingPillController()
+        var pillActions = PillActions()
+        pillActions.handsFreeToggle = { [weak self] in self?.dictation.handsFreeToggle() }
+        pillActions.cancelDictation = { [weak self] in self?.dictation.cancel() }
+        // handsFreeToggle finishes ANY in-flight recording (PTT included).
+        pillActions.confirmDictation = { [weak self] in self?.dictation.handsFreeToggle() }
+        pillActions.openScratchpad = { [weak self] in self?.showScratchpad() }
+        pillActions.openSettings = { [weak self] in self?.showSettings() }
+        pillActions.setLanguage = { [weak self] lang in
+            guard let self else { return }
+            self.store.settings.defaultLanguage = lang
+            Task { try? await AudioTranscriber.ensureAssets(locale: Locale(identifier: lang)) }
+        }
+        pillActions.currentLanguage = { [weak self] in
+            self?.store.settings.defaultLanguage ?? "en-US"
+        }
+        pill = RecordingPillController(actions: pillActions)
+        pill.install()
+
         dictation.onStateChange = { [weak self] state in
             self?.statusController.update(for: state)
             self?.pill.transition(to: state)
         }
-        dictation.onPartialTranscript = { [weak self] text in
-            self?.pill.updateTranscript(text)
+        dictation.onAudioLevel = { [weak self] level in
+            self?.pill.updateLevel(level)
         }
 
         // First-run prompting is owned by the onboarding wizard. Users who
