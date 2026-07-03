@@ -63,6 +63,10 @@ public struct HotkeyBinding: Codable, Sendable, Equatable {
 
 // MARK: - Settings (spec §16)
 
+public enum CleanupEngine: String, Codable, Sendable, Equatable {
+    case appleIntelligence, ollama
+}
+
 public struct Settings: Codable, Sendable, Equatable {
     public var contextAwareness: Bool
     public var autoAddDictionary: Bool
@@ -71,32 +75,64 @@ public struct Settings: Codable, Sendable, Equatable {
     /// Optional so settings saved before this field existed still decode.
     public var outputLanguage: String?
     public var cleanupEnabled: Bool
+    /// Which LLM polishes transcripts. Fresh installs use the zero-setup
+    /// Apple on-device model; files saved before this field existed decode
+    /// to .ollama so existing installs keep their behavior.
+    public var cleanupEngine: CleanupEngine
     public var cleanupModel: String
     public var ollamaURL: String
     public var pressEnterEnabled: Bool
     public var historyEnabled: Bool
     public var bindings: [HotkeyBinding]
+    public var onboardingCompleted: Bool
 
     public init(
         contextAwareness: Bool = true,
         autoAddDictionary: Bool = false,
         defaultLanguage: String = "en-US",
         cleanupEnabled: Bool = true,
+        cleanupEngine: CleanupEngine = .appleIntelligence,
         cleanupModel: String = "gemma4:e4b",
         ollamaURL: String = "http://127.0.0.1:11434",
         pressEnterEnabled: Bool = true,
         historyEnabled: Bool = true,
-        bindings: [HotkeyBinding] = HotkeyBinding.defaults
+        bindings: [HotkeyBinding] = HotkeyBinding.defaults,
+        onboardingCompleted: Bool = false
     ) {
         self.contextAwareness = contextAwareness
         self.autoAddDictionary = autoAddDictionary
         self.defaultLanguage = defaultLanguage
         self.cleanupEnabled = cleanupEnabled
+        self.cleanupEngine = cleanupEngine
         self.cleanupModel = cleanupModel
         self.ollamaURL = ollamaURL
         self.pressEnterEnabled = pressEnterEnabled
         self.historyEnabled = historyEnabled
         self.bindings = bindings
+        self.onboardingCompleted = onboardingCompleted
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case contextAwareness, autoAddDictionary, defaultLanguage, outputLanguage
+        case cleanupEnabled, cleanupModel, ollamaURL, pressEnterEnabled
+        case historyEnabled, bindings, cleanupEngine, onboardingCompleted
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        contextAwareness = try c.decode(Bool.self, forKey: .contextAwareness)
+        autoAddDictionary = try c.decode(Bool.self, forKey: .autoAddDictionary)
+        defaultLanguage = try c.decode(String.self, forKey: .defaultLanguage)
+        outputLanguage = try c.decodeIfPresent(String.self, forKey: .outputLanguage)
+        cleanupEnabled = try c.decode(Bool.self, forKey: .cleanupEnabled)
+        cleanupModel = try c.decode(String.self, forKey: .cleanupModel)
+        ollamaURL = try c.decode(String.self, forKey: .ollamaURL)
+        pressEnterEnabled = try c.decode(Bool.self, forKey: .pressEnterEnabled)
+        historyEnabled = try c.decode(Bool.self, forKey: .historyEnabled)
+        bindings = try c.decode([HotkeyBinding].self, forKey: .bindings)
+        // Pre-existing installs (key absent) keep Ollama and never see the wizard.
+        cleanupEngine = try c.decodeIfPresent(CleanupEngine.self, forKey: .cleanupEngine) ?? .ollama
+        onboardingCompleted = try c.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? true
     }
 }
 
