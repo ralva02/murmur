@@ -67,6 +67,10 @@ public enum CleanupEngine: String, Codable, Sendable, Equatable {
     case appleIntelligence, ollama
 }
 
+public enum SummaryEngine: String, Codable, Sendable, Equatable {
+    case ollama, claude
+}
+
 public struct Settings: Codable, Sendable, Equatable {
     public var contextAwareness: Bool
     public var autoAddDictionary: Bool
@@ -85,6 +89,10 @@ public struct Settings: Codable, Sendable, Equatable {
     public var historyEnabled: Bool
     public var bindings: [HotkeyBinding]
     public var onboardingCompleted: Bool
+    /// Long-form recording summaries: local Ollama by default, Claude opt-in.
+    public var summaryEngine: SummaryEngine
+    public var claudeModel: String
+    public var downloadsWatcherEnabled: Bool
 
     public init(
         contextAwareness: Bool = true,
@@ -97,7 +105,10 @@ public struct Settings: Codable, Sendable, Equatable {
         pressEnterEnabled: Bool = true,
         historyEnabled: Bool = true,
         bindings: [HotkeyBinding] = HotkeyBinding.defaults,
-        onboardingCompleted: Bool = false
+        onboardingCompleted: Bool = false,
+        summaryEngine: SummaryEngine = .ollama,
+        claudeModel: String = "claude-opus-4-8",
+        downloadsWatcherEnabled: Bool = false
     ) {
         self.contextAwareness = contextAwareness
         self.autoAddDictionary = autoAddDictionary
@@ -110,12 +121,16 @@ public struct Settings: Codable, Sendable, Equatable {
         self.historyEnabled = historyEnabled
         self.bindings = bindings
         self.onboardingCompleted = onboardingCompleted
+        self.summaryEngine = summaryEngine
+        self.claudeModel = claudeModel
+        self.downloadsWatcherEnabled = downloadsWatcherEnabled
     }
 
     enum CodingKeys: String, CodingKey {
         case contextAwareness, autoAddDictionary, defaultLanguage, outputLanguage
         case cleanupEnabled, cleanupModel, ollamaURL, pressEnterEnabled
         case historyEnabled, bindings, cleanupEngine, onboardingCompleted
+        case summaryEngine, claudeModel, downloadsWatcherEnabled
     }
 
     public init(from decoder: Decoder) throws {
@@ -133,6 +148,9 @@ public struct Settings: Codable, Sendable, Equatable {
         // Pre-existing installs (key absent) keep Ollama and never see the wizard.
         cleanupEngine = try c.decodeIfPresent(CleanupEngine.self, forKey: .cleanupEngine) ?? .ollama
         onboardingCompleted = try c.decodeIfPresent(Bool.self, forKey: .onboardingCompleted) ?? true
+        summaryEngine = try c.decodeIfPresent(SummaryEngine.self, forKey: .summaryEngine) ?? .ollama
+        claudeModel = try c.decodeIfPresent(String.self, forKey: .claudeModel) ?? "claude-opus-4-8"
+        downloadsWatcherEnabled = try c.decodeIfPresent(Bool.self, forKey: .downloadsWatcherEnabled) ?? false
     }
 }
 

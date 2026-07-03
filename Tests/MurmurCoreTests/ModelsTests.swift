@@ -36,6 +36,20 @@ import Testing
     #expect(back == s)
 }
 
+@Test func summarySettingsDefaultsAndMigration() throws {
+    let fresh = Settings()
+    #expect(fresh.summaryEngine == .ollama)
+    #expect(fresh.claudeModel == "claude-opus-4-8")
+    #expect(fresh.downloadsWatcherEnabled == false)
+
+    var s = Settings()
+    s.summaryEngine = .claude
+    s.claudeModel = "claude-sonnet-5"
+    s.downloadsWatcherEnabled = true
+    let back = try JSONDecoder().decode(Settings.self, from: JSONEncoder().encode(s))
+    #expect(back == s)
+}
+
 @Test func appCategorization() {
     #expect(AppCategory.categorize(bundleId: "com.apple.mail") == .email)
     #expect(AppCategory.categorize(bundleId: "com.tinyspeck.slackmacgap") == .chat)
