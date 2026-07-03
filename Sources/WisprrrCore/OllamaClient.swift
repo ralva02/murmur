@@ -26,6 +26,7 @@ public struct URLSessionTransport: HTTPTransport {
 
 public struct OllamaError: Error, Sendable {
     public let message: String
+    public init(message: String) { self.message = message }
 }
 
 public struct OllamaClient: Sendable {
