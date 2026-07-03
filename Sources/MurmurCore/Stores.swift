@@ -29,6 +29,27 @@ public final class AppStore: @unchecked Sendable {
     public private(set) var history: [TranscriptRecord]
     public private(set) var notes: [Note]
 
+    /// True when this process is a test runner (SPM swift-testing helper,
+    /// xctest bundle, or Xcode's XCTest host).
+    public static var isRunningUnderTestHarness: Bool {
+        let argv0 = ProcessInfo.processInfo.arguments.first ?? ""
+        return argv0.contains("swiftpm-testing-helper")
+            || argv0.contains(".xctest")
+            || argv0.hasSuffix("/xctest")
+            || NSClassFromString("XCTestCase") != nil
+            || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    /// Tests must never read or mutate the real user data directory. This once
+    /// actually happened: a migration that ran implicitly in init moved the
+    /// production directory into a unit test's temp sandbox, where another
+    /// test's cleanup destroyed it. Trap loudly instead of corrupting quietly.
+    private static func guardProductionPath(_ url: URL, operation: String) {
+        precondition(
+            !(isRunningUnderTestHarness && (url == defaultRootDirectory || url == legacyDefaultRootDirectory)),
+            "AppStore.\(operation): refusing to touch the real user data directory from a test run — pass an explicit temp path")
+    }
+
     /// One-time migration from the pre-rename directory. Deliberately NOT part
     /// of init: implicit migration in a constructor once let unit tests using
     /// temp roots "migrate" (move!) the real user data into their sandboxes.
@@ -37,12 +58,15 @@ public final class AppStore: @unchecked Sendable {
         from legacy: URL = AppStore.legacyDefaultRootDirectory,
         to root: URL = AppStore.defaultRootDirectory
     ) {
+        guardProductionPath(legacy, operation: "migrateLegacyDataIfNeeded")
+        guardProductionPath(root, operation: "migrateLegacyDataIfNeeded")
         guard !FileManager.default.fileExists(atPath: root.path),
               FileManager.default.fileExists(atPath: legacy.path) else { return }
         try? FileManager.default.moveItem(at: legacy, to: root)
     }
 
     public init(rootDirectory: URL = AppStore.defaultRootDirectory) {
+        Self.guardProductionPath(rootDirectory, operation: "init")
         self.rootDirectory = rootDirectory
         try? FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
         self.settings = Self.load("settings.json", from: rootDirectory) ?? Settings()
