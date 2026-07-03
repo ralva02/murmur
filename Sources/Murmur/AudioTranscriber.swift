@@ -36,6 +36,11 @@ final class AudioTranscriber {
     /// Called on the main actor with the running transcript (finalized + volatile).
     var onPartial: ((String) -> Void)?
 
+    /// Called on the main actor with the mic RMS level (0…1) while recording.
+    /// Declared @MainActor so it can be captured by the @Sendable audio-thread
+    /// sink — same pattern as AudioLevelMeter (SettingsPage.swift).
+    var onLevel: (@MainActor (Float) -> Void)?
+
     var isRunning: Bool { analyzer != nil }
 
     /// Downloads model assets for the locale if needed. Safe to call repeatedly.
@@ -116,9 +121,13 @@ final class AudioTranscriber {
         }
         converter = tapConverter
 
+        let levelHandler = onLevel
         Self.installStreamTap(
             on: audioEngine, converter: tapConverter,
-            format: analyzerFormat, continuation: continuation)
+            format: analyzerFormat, continuation: continuation,
+            levelSink: { rms in
+                Task { @MainActor in levelHandler?(min(rms * 8, 1)) }
+            })
 
         audioEngine.prepare()
         try audioEngine.start()
@@ -132,11 +141,18 @@ final class AudioTranscriber {
         on engine: AVAudioEngine,
         converter: AVAudioConverter,
         format: AVAudioFormat,
-        continuation: AsyncStream<AnalyzerInput>.Continuation
+        continuation: AsyncStream<AnalyzerInput>.Continuation,
+        levelSink: @escaping @Sendable (Float) -> Void
     ) {
         let micFormat = engine.inputNode.outputFormat(forBus: 0)
         engine.inputNode.installTap(onBus: 0, bufferSize: 4096, format: micFormat) {
             buffer, _ in
+            if let data = buffer.floatChannelData?[0] {
+                let frames = Int(buffer.frameLength)
+                var sum: Float = 0
+                for i in 0..<frames { sum += data[i] * data[i] }
+                levelSink(frames > 0 ? sqrtf(sum / Float(frames)) : 0)
+            }
             guard let converted = convert(buffer: buffer, with: converter, to: format)
             else { return }
             continuation.yield(AnalyzerInput(buffer: converted))

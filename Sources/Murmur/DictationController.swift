@@ -21,6 +21,8 @@ final class DictationController {
     var onTranscriptRecorded: ((TranscriptRecord) -> Void)?
     /// Live transcript (finalized + volatile) while recording.
     var onPartialTranscript: ((String) -> Void)?
+    /// Mic level (0…1) while recording, for the pill waveform.
+    var onAudioLevel: ((Float) -> Void)?
 
     private let store: AppStore
     private let transcriber = AudioTranscriber()
@@ -43,6 +45,9 @@ final class DictationController {
         self.store = store
         transcriber.onPartial = { [weak self] text in
             self?.onPartialTranscript?(text)
+        }
+        transcriber.onLevel = { [weak self] level in
+            self?.onAudioLevel?(level)
         }
     }
 
