@@ -53,8 +53,10 @@ final class DownloadsWatcher {
     }
 
     private func offerImport(_ url: URL) {
+        Diag.app.notice("downloads watcher: offering import of \(url.lastPathComponent, privacy: .public)")
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert]) { granted, _ in
+            Diag.app.notice("downloads watcher: notification auth granted=\(granted)")
             guard granted else { return }
             let content = UNMutableNotificationContent()
             content.title = "Import into Murmur?"

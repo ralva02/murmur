@@ -28,10 +28,15 @@ raw transcript. Say *"um so let's meet tuesday, wait no, friday"* and get
 punctuation inferred, tone matched to the app you're dictating into.
 
 - 🎙️ **Hold Fn, speak, release** — text appears at your cursor in any app
+- 📼 **Recordings** — capture meetings (mic + system audio) or import Plaud
+  exports; on-device transcription and local AI summaries, with an optional
+  Claude API engine for higher quality
 - 🧠 **LLM polish, fully local** — Apple Intelligence out of the box, or a
   local [Ollama](https://ollama.com) model for the best quality
 - 🔒 **Private by construction** — on-device speech recognition, on-device
-  cleanup, no network calls, no accounts, no telemetry
+  cleanup, no accounts, no telemetry. Nothing leaves this Mac — unless you
+  enable Claude summaries, in which case transcripts (not audio) are sent
+  to Anthropic
 - 📚 **Learns your words** — dictionary, auto-learned spellings from your
   corrections, snippets ("my email address" → you@example.com), per-app tone
 - ⚡ **Fast** — ~0.4 s from key-release to inserted text (warm)
