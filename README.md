@@ -7,19 +7,36 @@ whatever app is focused. Nothing leaves your Mac.
 
 - **ASR:** Apple's on-device `SpeechAnalyzer`/`SpeechTranscriber` (macOS 26+),
   biased with your dictionary and on-screen proper nouns.
-- **Cleanup:** a local Ollama model (default `gemma4:e4b`) applies the
-  minimal-edit cleanup contract — fillers removed, punctuation inferred,
-  self-corrections resolved ("let's meet Tuesday, wait no, Friday" → "Let's meet
-  Friday"), tone matched to the app category.
+- **Cleanup:** a local LLM applies the minimal-edit cleanup contract — fillers
+  removed, punctuation inferred, self-corrections resolved ("let's meet
+  Tuesday, wait no, Friday" → "Let's meet Friday"), tone matched to the app
+  category. Apple Intelligence out of the box; a local Ollama model (default
+  `gemma4:e4b`) as the higher-quality upgrade.
 - **Insertion:** Accessibility API with retry, synthetic-paste fallback, and
   clipboard + notification as the last resort — dictation is never lost.
+
+## Install
+
+1. Download `Murmur-<version>.zip` from the [latest release](../../releases/latest) and unzip it.
+2. Drag `Murmur.app` into **Applications**.
+3. **Right-click → Open** the first time (Murmur isn't notarized; macOS blocks
+   double-click opens of unidentified apps — right-click bypasses this once,
+   permanently).
+4. Follow the in-app setup: it walks you through the three permissions and
+   picks a cleanup engine. With Apple Intelligence available, dictation is
+   polished out of the box; installing [Ollama](https://ollama.com) later
+   upgrades quality (Settings → Cleanup).
 
 ## Requirements
 
 - macOS 26+ on Apple Silicon
-- [Ollama](https://ollama.com) running locally with the cleanup model:
-  `ollama pull gemma4:e4b`
-  (Without Ollama, Murmur still works — it inserts the raw on-device transcript.)
+- For cleanup, one of:
+  - **Apple Intelligence** enabled (zero setup — the default for new installs)
+  - **[Ollama](https://ollama.com)** with the cleanup model:
+    `ollama pull gemma4:e4b` (best quality; the in-app setup can download the
+    model for you)
+
+  Without either, Murmur still works — it inserts the raw on-device transcript.
 
 ## Build & run
 
