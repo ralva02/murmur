@@ -42,5 +42,16 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-codesign --force -s - "$APP"
+# Sign with a stable identity when available. Ad-hoc signatures change every
+# build, which resets TCC permission grants (Accessibility/Input Monitoring/
+# Microphone) on each rebuild; a real identity keeps them across rebuilds.
+IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
+    | awk -F'"' '/Apple Development/ {print $2; exit}')
+if [ -n "$IDENTITY" ]; then
+    codesign --force -s "$IDENTITY" "$APP"
+    echo "Signed with: $IDENTITY"
+else
+    codesign --force -s - "$APP"
+    echo "WARNING: ad-hoc signed — permission grants will reset on every rebuild"
+fi
 echo "Built $APP"

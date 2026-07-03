@@ -44,16 +44,19 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     private func update(for state: DictationController.State) {
-        let (symbol, description): (String, String) = switch state {
+        let image: NSImage? = switch state {
         case .idle: Permissions.allGranted
-            ? ("mic", "Wisprrr idle")
-            : ("exclamationmark.triangle", "Wisprrr needs permissions")
-        case .recording: ("mic.fill", "Wisprrr recording")
-        case .processing: ("hourglass", "Wisprrr processing")
-        case .injecting: ("arrow.down.doc", "Wisprrr inserting")
+            ? WisprrrIcon.idle
+            : NSImage(systemSymbolName: "exclamationmark.triangle",
+                      accessibilityDescription: "Wisprrr needs permissions")
+        case .recording: WisprrrIcon.recording
+        case .processing: NSImage(systemSymbolName: "hourglass",
+                                  accessibilityDescription: "Wisprrr processing")
+        case .injecting: NSImage(systemSymbolName: "arrow.down.doc",
+                                 accessibilityDescription: "Wisprrr inserting")
         }
-        statusItem.button?.image = NSImage(
-            systemSymbolName: symbol, accessibilityDescription: description)
+        statusItem.button?.image = image
+        statusItem.button?.setAccessibilityLabel("Wisprrr")
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
