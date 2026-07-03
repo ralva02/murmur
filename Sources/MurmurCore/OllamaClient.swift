@@ -72,22 +72,40 @@ public struct OllamaError: Error, Sendable {
 public struct OllamaClient: Sendable {
     public let baseURL: URL
     let transport: HTTPTransport
+    /// Called after each chat with server-side timing ("prefill=…"), for
+    /// latency diagnostics.
+    let onMetrics: (@Sendable (String) -> Void)?
 
-    public init(baseURL: URL, transport: HTTPTransport = URLSessionTransport()) {
+    public init(baseURL: URL, transport: HTTPTransport = URLSessionTransport(),
+                onMetrics: (@Sendable (String) -> Void)? = nil) {
         self.baseURL = baseURL
         self.transport = transport
+        self.onMetrics = onMetrics
     }
 
     private struct ChatResponse: Decodable {
         struct Message: Decodable { let content: String }
         let message: Message
+        let total_duration: Int64?
+        let load_duration: Int64?
+        let prompt_eval_count: Int?
+        let prompt_eval_duration: Int64?
+        let eval_count: Int?
+        let eval_duration: Int64?
+
+        var metrics: String {
+            func ms(_ ns: Int64?) -> String { ns.map { "\($0 / 1_000_000)ms" } ?? "?" }
+            return "total=\(ms(total_duration)) load=\(ms(load_duration)) "
+                + "prefill=\(prompt_eval_count ?? -1)tok/\(ms(prompt_eval_duration)) "
+                + "gen=\(eval_count ?? -1)tok/\(ms(eval_duration))"
+        }
     }
 
     public func chat(model: String, system: String, user: String) async throws -> String {
-        var request = URLRequest(url: baseURL.appendingPathComponent("api/chat"))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
+        // "think": false — reasoning models (gemma4, qwen…) otherwise burn
+        // seconds of hidden thinking tokens on a job that needs none; cleanup
+        // is minimal-edit smoothing, not problem solving.
+        var payload: [String: Any] = [
             "model": model,
             "messages": [
                 ["role": "system", "content": system],
@@ -96,30 +114,46 @@ public struct OllamaClient: Sendable {
             "stream": false,
             "options": ["temperature": 0],
             "keep_alive": "30m",
-        ] as [String: Any])
+            "think": false,
+        ]
 
-        let (data, status) = try await transport.send(request)
+        var (data, status) = try await send(payload, to: "api/chat")
+        if status != 200 {
+            // Some models reject the think parameter outright — retry bare.
+            payload.removeValue(forKey: "think")
+            (data, status) = try await send(payload, to: "api/chat")
+        }
         guard status == 200 else {
             throw OllamaError(message: "Ollama returned HTTP \(status)")
         }
-        let content = try JSONDecoder().decode(ChatResponse.self, from: data).message.content
-        return Self.stripFences(content).trimmingCharacters(in: .whitespacesAndNewlines)
+        let response = try JSONDecoder().decode(ChatResponse.self, from: data)
+        onMetrics?(response.metrics)
+        return Self.stripFences(response.message.content).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Loads the model and primes the prompt-prefix cache while the user is
     /// still speaking, so the real request only pays for generation.
     public func prewarm(model: String, system: String) async {
-        var request = URLRequest(url: baseURL.appendingPathComponent("api/chat"))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: [
+        var payload: [String: Any] = [
             "model": model,
             "messages": [["role": "system", "content": system]],
             "stream": false,
             "options": ["num_predict": 1],
             "keep_alive": "30m",
-        ] as [String: Any])
-        _ = try? await transport.send(request)
+            "think": false,
+        ]
+        if let result = try? await send(payload, to: "api/chat"), result.1 != 200 {
+            payload.removeValue(forKey: "think")
+            _ = try? await send(payload, to: "api/chat")
+        }
+    }
+
+    private func send(_ payload: [String: Any], to path: String) async throws -> (Data, Int) {
+        var request = URLRequest(url: baseURL.appendingPathComponent(path))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+        return try await transport.send(request)
     }
 
     public func isAlive() async -> Bool {

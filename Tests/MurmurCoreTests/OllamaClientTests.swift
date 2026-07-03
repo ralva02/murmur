@@ -138,3 +138,38 @@ private final class EventBox: @unchecked Sendable {
         try await client.pull(model: "nope", transport: transport) { _ in }
     }
 }
+
+// MARK: - Thinking suppression
+
+private final class RecordingTransport: HTTPTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var responses: [(Data, Int)]
+    private(set) var bodies: [[String: Any]] = []
+
+    init(responses: [(Data, Int)]) { self.responses = responses }
+
+    var recordedBodies: [[String: Any]] { lock.withLock { bodies } }
+
+    func send(_ request: URLRequest) async throws -> (Data, Int) {
+        lock.withLock {
+            if let body = request.httpBody,
+               let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
+                bodies.append(json)
+            }
+            return responses.isEmpty ? (Data(), 500) : responses.removeFirst()
+        }
+    }
+}
+
+@Test func chatDisablesThinkingAndRetriesWithoutFlagOn400() async throws {
+    let ok = #"{"message":{"content":"Hi."}}"#.data(using: .utf8)!
+    // First call (with think:false) rejected, second (without) accepted.
+    let transport = RecordingTransport(responses: [(Data(), 400), (ok, 200)])
+    let client = OllamaClient(baseURL: URL(string: "http://x")!, transport: transport)
+    let out = try await client.chat(model: "m", system: "s", user: "u")
+    #expect(out == "Hi.")
+    let bodies = transport.recordedBodies
+    #expect(bodies.count == 2)
+    #expect(bodies[0]["think"] as? Bool == false)
+    #expect(bodies[1]["think"] == nil)
+}

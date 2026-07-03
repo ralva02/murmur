@@ -48,7 +48,7 @@ Dictation flow (one stateful orchestrator, `DictationController`: idle → recor
 3. On stop: waits for the in-flight ASR start task (`startTask` — stopping without awaiting it orphans the engine and yields empty transcripts), caps finalization wait at 700 ms (volatile transcript + LLM re-punctuation make full finalization unnecessary), then `DictationPipeline.process` → `TextInjector` (AX insert ×5 retries → synthetic ⌘V with pasteboard restore → clipboard + notification).
 4. UI surfaces: `RecordingPill` (non-activating bottom-center NSPanel with live transcript), menu-bar `StatusItemController` (has notch-hidden detection — this user's menu bar is crowded and new status items land behind the notch invisible; the app opens Settings as fallback), Settings/Activity/Scratchpad windows (SwiftUI in NSWindows).
 
-Latency budget (measured): ~0.4 s release-to-text warm. The enemies are cold Ollama loads (mitigated by prewarm + `keep_alive: 30m`) and ASR finalization (capped) — not inference.
+Latency budget (measured): ~0.4 s release-to-text warm. The enemies are cold Ollama loads (mitigated by prewarm + `keep_alive: 30m`), ASR finalization (capped), and hidden reasoning — thinking-capable models (gemma4) silently burn ~100+ thinking tokens (~4 s) when given a context-rich prompt, so `OllamaClient` sends `"think": false` (with a bare retry for models that reject the flag). Per-stage timings land in the `Diag` log (`latency:` and `ollama:` lines) — check them before theorizing.
 
 ## Verifying changes end-to-end without a human
 

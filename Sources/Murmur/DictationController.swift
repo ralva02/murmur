@@ -73,7 +73,9 @@ final class DictationController {
                 }
             case .ollama:
                 if let url = URL(string: settings.ollamaURL) {
-                    let client = OllamaClient(baseURL: url)
+                    let client = OllamaClient(baseURL: url, onMetrics: { metrics in
+                        Diag.dictation.notice("ollama: \(metrics, privacy: .public)")
+                    })
                     if await client.isAlive() {
                         cleanup = OllamaCleanupProvider(
                             client: client, model: settings.cleanupModel,
@@ -261,6 +263,7 @@ final class DictationController {
             return
         }
 
+        let tPipelineWait = ProcessInfo.processInfo.systemUptime
         let pipeline: DictationPipeline
         if let pending = pendingPipeline {
             pipeline = await pending.value
@@ -268,7 +271,10 @@ final class DictationController {
             pipeline = await makePipeline(prewarmFor: nil)
         }
         pendingPipeline = nil
+        let tProcess = ProcessInfo.processInfo.systemUptime
         let output = await pipeline.process(rawTranscript: raw, context: sessionContext)
+        let tInject = ProcessInfo.processInfo.systemUptime
+        Diag.dictation.notice("latency: pipelineWait=\(tProcess - tPipelineWait, format: .fixed(precision: 2))s cleanup=\(tInject - tProcess, format: .fixed(precision: 2))s")
 
         state = .injecting
         let result = await TextInjector.insert(output.textToInsert)

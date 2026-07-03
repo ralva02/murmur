@@ -372,9 +372,8 @@ private struct WaveDots: View {
         }
         .frame(height: 18)
         .onReceive(tick) { _ in
-            let idle = Float.random(in: 0.12...0.30)
             history.removeFirst()
-            history.append(max(min(level * 1.8, 1), idle))
+            history.append(min(level * 1.8, 1))   // real signal only
         }
         .animation(.linear(duration: 0.05), value: history)
     }
