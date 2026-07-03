@@ -57,3 +57,10 @@ import Testing
         context: ContextPayload(appCategory: .chat))
     #expect(out.textToInsert == "hi")
 }
+
+@Test func cleanupSanityRejectsEmptyAndRunawayOutput() {
+    #expect(!CleanupSanity.isSane(output: "", input: "hello there"))
+    #expect(CleanupSanity.isSane(output: "Hello there.", input: "hello there"))
+    let runaway = Array(repeating: "word", count: 200).joined(separator: " ")
+    #expect(!CleanupSanity.isSane(output: runaway, input: "short input"))
+}

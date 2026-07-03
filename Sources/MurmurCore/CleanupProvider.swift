@@ -36,6 +36,18 @@ public struct PassthroughCleanupProvider: CleanupProvider {
     }
 }
 
+/// The cleanup contract is minimal-edit smoothing (spec §3.2). Empty output
+/// or output far longer than the input means the model went off-script.
+/// Shared by every LLM-backed provider.
+public enum CleanupSanity {
+    public static func isSane(output: String, input: String) -> Bool {
+        guard !output.isEmpty else { return false }
+        let inputWords = input.split(whereSeparator: \.isWhitespace).count
+        let outputWords = output.split(whereSeparator: \.isWhitespace).count
+        return outputWords <= max(inputWords * 3, inputWords + 20)
+    }
+}
+
 public struct OllamaCleanupProvider: CleanupProvider {
     let client: OllamaClient
     let model: String
@@ -59,21 +71,12 @@ public struct OllamaCleanupProvider: CleanupProvider {
             dictionary: dictionary, style: style, translateTo: translateTo)
         do {
             let output = try await client.chat(model: model, system: prompt.system, user: prompt.user)
-            guard Self.isSane(output: output, input: rawTranscript) else {
+            guard CleanupSanity.isSane(output: output, input: rawTranscript) else {
                 return CleanupResult(text: rawTranscript, usedFallback: true)
             }
             return CleanupResult(text: output, usedFallback: false)
         } catch {
             return CleanupResult(text: rawTranscript, usedFallback: true)
         }
-    }
-
-    /// The cleanup contract is minimal-edit smoothing (spec §3.2). Empty output
-    /// or output far longer than the input means the model went off-script.
-    static func isSane(output: String, input: String) -> Bool {
-        guard !output.isEmpty else { return false }
-        let inputWords = input.split(whereSeparator: \.isWhitespace).count
-        let outputWords = output.split(whereSeparator: \.isWhitespace).count
-        return outputWords <= max(inputWords * 3, inputWords + 20)
     }
 }
