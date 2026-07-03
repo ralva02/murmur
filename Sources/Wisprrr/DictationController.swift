@@ -19,9 +19,14 @@ final class DictationController {
     }
     var onStateChange: ((State) -> Void)?
     var onTranscriptRecorded: ((TranscriptRecord) -> Void)?
+    /// Live transcript (finalized + volatile) while recording.
+    var onPartialTranscript: ((String) -> Void)?
 
     private let store: AppStore
     private let transcriber = AudioTranscriber()
+    /// In-flight ASR engine startup; stop/cancel must await it or they race
+    /// past an engine that comes up moments later and runs orphaned.
+    private var startTask: Task<Void, any Error>?
     private var sessionContext: ContextPayload = .empty
     private var sessionStartedAt: TimeInterval = 0
     private var lastTriggerAt: TimeInterval = 0
@@ -34,6 +39,9 @@ final class DictationController {
 
     init(store: AppStore) {
         self.store = store
+        transcriber.onPartial = { [weak self] text in
+            self?.onPartialTranscript?(text)
+        }
     }
 
     private func makePipeline() async -> DictationPipeline {
@@ -79,6 +87,7 @@ final class DictationController {
     func cancel() {
         guard case .recording = state else { return }
         Task {
+            try? await startTask?.value
             await transcriber.cancel()
             commandModeArmed = false
             state = .idle
@@ -122,9 +131,15 @@ final class DictationController {
     // MARK: - Session lifecycle
 
     private func startRecording(handsFree: Bool) {
-        guard state == .idle else { return }
+        guard state == .idle else {
+            Diag.dictation.notice("startRecording skipped: not idle")
+            return
+        }
         let now = ProcessInfo.processInfo.systemUptime
-        guard now - lastTriggerAt >= debounceInterval else { return }
+        guard now - lastTriggerAt >= debounceInterval else {
+            Diag.dictation.notice("startRecording skipped: debounced")
+            return
+        }
         lastTriggerAt = now
 
         guard Permissions.microphoneGranted else {
@@ -148,14 +163,18 @@ final class DictationController {
         // Bias ASR with dictionary terms and on-screen names (spec §3.1 stage 3).
         let bias = store.dictionary.map(\.term) + sessionContext.properNouns
         let locale = Locale(identifier: store.settings.defaultLanguage)
-        Task {
+        Diag.dictation.notice("recording started (handsFree=\(handsFree), app=\(self.sessionContext.appBundleId ?? "?", privacy: .public))")
+        startTask = Task {
             do {
                 try await transcriber.start(locale: locale, contextualStrings: bias)
+                Diag.dictation.notice("ASR engine running")
             } catch {
+                Diag.dictation.error("ASR start FAILED: \(error.localizedDescription, privacy: .public)")
                 state = .idle
                 commandModeArmed = false
                 TextInjector.notify(title: "Wisprrr",
                     body: "Could not start dictation: \(error.localizedDescription)")
+                throw error
             }
         }
     }
@@ -167,13 +186,21 @@ final class DictationController {
 
         let elapsed = ProcessInfo.processInfo.systemUptime - sessionStartedAt
         if elapsed < minSessionDuration {
+            Diag.dictation.notice("session discarded: too short (\(elapsed, format: .fixed(precision: 2))s)")
             await transcriber.cancel()
             state = .idle
             return
         }
 
         state = .processing
+        do {
+            try await startTask?.value
+        } catch {
+            state = .idle
+            return   // engine never started; the start path already notified
+        }
         let raw = await transcriber.stop()
+        Diag.dictation.notice("transcript: \(raw.count) chars, app=\(self.sessionContext.appBundleId ?? "?", privacy: .public)")
         guard !raw.isEmpty else {
             state = .idle
             return
@@ -190,6 +217,7 @@ final class DictationController {
 
         state = .injecting
         let result = await TextInjector.insert(output.textToInsert)
+        Diag.dictation.notice("pipeline: \(output.textToInsert.count) chars (fallback=\(output.usedFallback)) → inserted=\(result.inserted) clipboard=\(result.fellBackToClipboard)")
         if output.pressEnter && result.inserted && !result.fellBackToClipboard {
             TextInjector.pressEnter()
         }

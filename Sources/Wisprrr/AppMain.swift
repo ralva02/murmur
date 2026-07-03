@@ -21,10 +21,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dictation: DictationController!
     private var hotkeys: HotkeyListener!
     private var statusController: StatusItemController!
+    private var pill: RecordingPillController!
     private var settingsWindow: NSWindow?
     private var activityWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Diag.app.notice("launch: accessibility=\(Permissions.accessibilityTrusted) inputMonitoring=\(Permissions.inputMonitoringGranted) microphone=\(Permissions.microphoneGranted)")
         store = AppStore()
         dictation = DictationController(store: store)
 
@@ -33,6 +35,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             store: store,
             openSettings: { [weak self] in self?.showSettings() },
             openActivity: { [weak self] in self?.showActivity() })
+
+        pill = RecordingPillController()
+        dictation.onStateChange = { [weak self] state in
+            self?.statusController.update(for: state)
+            self?.pill.transition(to: state)
+        }
+        dictation.onPartialTranscript = { [weak self] text in
+            self?.pill.updateTranscript(text)
+        }
 
         // First-run permission prompts (spec §17: app keeps running regardless).
         if !Permissions.accessibilityTrusted { Permissions.requestAccessibility() }

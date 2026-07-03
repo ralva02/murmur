@@ -25,6 +25,7 @@ final class HotkeyListener {
     private var fnPressStartedAt: TimeInterval = 0
     private var lastFnTapEndedAt: TimeInterval = 0
     private var pttActive = false
+    private var pendingHoldWork: DispatchWorkItem?
 
     /// Releases within this window count as a tap rather than a hold.
     private let tapMaxDuration: TimeInterval = 0.25
@@ -56,7 +57,11 @@ final class HotkeyListener {
             eventsOfInterest: mask,
             callback: callback,
             userInfo: Unmanaged.passUnretained(self).toOpaque())
-        else { return false }
+        else {
+            Diag.hotkeys.error("event tap creation FAILED (needs Accessibility or Input Monitoring)")
+            return false
+        }
+        Diag.hotkeys.notice("event tap created")
 
         self.tap = tap
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
@@ -109,30 +114,38 @@ final class HotkeyListener {
 
     private func handleFnTransition(isDown: Bool) {
         guard isDown != fnIsDown else { return }
+        Diag.hotkeys.notice("fn \(isDown ? "pressed" : "released")")
         fnIsDown = isDown
         let now = ProcessInfo.processInfo.systemUptime
 
         if isDown {
             fnPressStartedAt = now
-            if !pttActive {
-                pttActive = true
-                onPTTStart?()
+            // Push-to-talk begins only once the key has been held past the
+            // tap threshold, so taps never spawn throwaway sessions.
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, self.fnIsDown, !self.pttActive else { return }
+                self.pttActive = true
+                self.onPTTStart?()
             }
+            pendingHoldWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + tapMaxDuration, execute: work)
         } else {
-            let heldFor = now - fnPressStartedAt
-            pttActive = false
-            if heldFor <= tapMaxDuration {
-                // A tap, not a hold. Double tap → hands-free; the controller
-                // discards the sub-250 ms recording either way.
-                if now - lastFnTapEndedAt <= doubleTapWindow {
-                    lastFnTapEndedAt = 0
-                    onHandsFreeToggle?()
-                } else {
-                    lastFnTapEndedAt = now
-                }
+            pendingHoldWork?.cancel()
+            pendingHoldWork = nil
+            if pttActive {
+                // End of a hold → finish push-to-talk.
+                pttActive = false
                 onPTTEnd?()
+            } else if isRecordingProvider?() == true {
+                // Single tap while hands-free recording → stop it.
+                lastFnTapEndedAt = 0
+                onHandsFreeToggle?()
+            } else if now - lastFnTapEndedAt <= doubleTapWindow {
+                // Double tap → start hands-free.
+                lastFnTapEndedAt = 0
+                onHandsFreeToggle?()
             } else {
-                onPTTEnd?()
+                lastFnTapEndedAt = now
             }
         }
     }

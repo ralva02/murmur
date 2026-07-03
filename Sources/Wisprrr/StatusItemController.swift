@@ -26,10 +26,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.delegate = self
         statusItem.menu = menu
         update(for: .idle)
-
-        dictation.onStateChange = { [weak self] state in
-            self?.update(for: state)
-        }
     }
 
     /// On notched MacBooks, status items that don't fit to the right of the
@@ -43,7 +39,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         return window.frame.minX < rightArea.minX
     }
 
-    private func update(for state: DictationController.State) {
+    func update(for state: DictationController.State) {
         let image: NSImage? = switch state {
         case .idle: Permissions.allGranted
             ? WisprrrIcon.idle

@@ -38,14 +38,23 @@ enum TextInjector {
 
     /// Replaces the current selection (inserts at cursor when selection is empty).
     private static func axInsert(_ text: String) -> Bool {
-        guard let focused = ContextReader.focusedElement() else { return false }
+        guard let focused = ContextReader.focusedElement() else {
+            Diag.injection.error("axInsert: no focused element (accessibility granted? field focused?)")
+            return false
+        }
         var settable = DarwinBoolean(false)
-        guard AXUIElementIsAttributeSettable(
-                focused, kAXSelectedTextAttribute as CFString, &settable) == .success,
-              settable.boolValue
-        else { return false }
-        return AXUIElementSetAttributeValue(
-            focused, kAXSelectedTextAttribute as CFString, text as CFString) == .success
+        let settableErr = AXUIElementIsAttributeSettable(
+            focused, kAXSelectedTextAttribute as CFString, &settable)
+        guard settableErr == .success, settable.boolValue else {
+            Diag.injection.notice("axInsert: selectedText not settable (err=\(settableErr.rawValue), settable=\(settable.boolValue))")
+            return false
+        }
+        let setErr = AXUIElementSetAttributeValue(
+            focused, kAXSelectedTextAttribute as CFString, text as CFString)
+        if setErr != .success {
+            Diag.injection.error("axInsert: set failed err=\(setErr.rawValue)")
+        }
+        return setErr == .success
     }
 
     /// Synthetic Cmd+V with pasteboard save/restore, for apps that reject AX writes.
@@ -59,6 +68,7 @@ enum TextInjector {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
+        Diag.injection.notice("falling back to synthetic paste")
         guard postKeystroke(keyCode: 9, flags: .maskCommand) else { return false } // Cmd+V
 
         // Give the target app time to read the pasteboard before restoring it.

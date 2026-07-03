@@ -33,5 +33,21 @@ if let flagIndex = CommandLine.arguments.firstIndex(of: "--process-text"),
     exit(exitCode)
 }
 
+// Debug entry: waits 3 s (focus a text field somewhere), then runs the real
+// injection path. Launch as the bundle so TCC attributes it to the app:
+//   open build/Wisprrr.app --args --inject-text "hello from wisprrr"
+if let flagIndex = CommandLine.arguments.firstIndex(of: "--inject-text"),
+   CommandLine.arguments.count > flagIndex + 1 {
+    let text = CommandLine.arguments[flagIndex + 1]
+    let ok: Bool = await {
+        print("accessibility trusted: \(Permissions.accessibilityTrusted)")
+        try? await Task.sleep(for: .seconds(3))
+        let result = await TextInjector.insert(text)
+        print("inserted: \(result.inserted)  clipboardFallback: \(result.fellBackToClipboard)")
+        return result.inserted
+    }()
+    exit(ok ? 0 : 1)
+}
+
 // App mode (menu bar shell) is wired up in AppMain.
 AppMain.run()
