@@ -127,8 +127,7 @@ swift run Murmur --process-text "some raw text"   # pipeline smoke test, no mic
 bash Scripts/make_release.sh 0.2.0                # distributable zip
 ```
 
-Design docs live in `docs/superpowers/specs/` ·
-Source spec: `docs/wispr-flow-spec.md`
+Design docs live in `docs/superpowers/specs/`.
 
 ## Known limitations
 

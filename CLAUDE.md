@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Murmur (formerly Wisprrr) — a fully local macOS menu-bar voice-to-text app: hold Fn, speak, and LLM-polished text is inserted at the cursor of whatever app is focused. It is a personal clone of Wispr Flow built from the reverse-engineered spec in `docs/wispr-flow-spec.md`; design decisions are in `docs/superpowers/specs/2026-07-03-wisprrr-design.md`. Requires macOS 26+ (SpeechAnalyzer API) and a local Ollama for cleanup (default model `gemma4:e4b`; app degrades to raw-transcript passthrough without it).
+Murmur (formerly Wisprrr) — a fully local macOS menu-bar voice-to-text app: hold Fn, speak, and LLM-polished text is inserted at the cursor of whatever app is focused. It is a personal clone of Wispr Flow built from the reverse-engineered spec in `docs/wispr-flow-spec.md` (local-only, gitignored — not in the public repo); design decisions are in `docs/superpowers/specs/2026-07-03-wisprrr-design.md`. Requires macOS 26+ (SpeechAnalyzer API) and a local Ollama for cleanup (default model `gemma4:e4b`; app degrades to raw-transcript passthrough without it).
 
 ## Commands
 
