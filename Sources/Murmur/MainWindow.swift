@@ -26,6 +26,9 @@ enum MainSection: String, CaseIterable, Identifiable {
 @MainActor @Observable
 final class MainModel {
     var section: MainSection = .home
+    var showOnboarding: Bool
+    /// Re-arms the hotkey listener after permission grants (set by AppDelegate).
+    var onPermissionsChanged: () -> Void = {}
     let store: AppStore
     let settingsModel: SettingsModel
     let onBindingsChanged: () -> Void
@@ -36,6 +39,8 @@ final class MainModel {
         self.dictation = dictation
         self.settingsModel = SettingsModel(store: store)
         self.onBindingsChanged = onBindingsChanged
+        self.showOnboarding = !store.settings.onboardingCompleted
+            || CommandLine.arguments.contains("--onboarding")
     }
 }
 
@@ -43,6 +48,18 @@ struct MainView: View {
     @Bindable var model: MainModel
 
     var body: some View {
+        Group {
+            if model.showOnboarding {
+                OnboardingView(model: model)
+            } else {
+                mainChrome
+            }
+        }
+        .background(Theme.canvas)
+        .frame(minWidth: 940, minHeight: 620)
+    }
+
+    private var mainChrome: some View {
         HStack(spacing: 0) {
             Sidebar(model: model)
                 .frame(width: 208)
@@ -56,8 +73,6 @@ struct MainView: View {
                 .padding(.vertical, 14)
                 .padding(.trailing, 14)
         }
-        .background(Theme.canvas)
-        .frame(minWidth: 940, minHeight: 620)
     }
 
     @ViewBuilder

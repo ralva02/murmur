@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pill: RecordingPillController!
     private var mainWindow: NSWindow?
     private var mainModel: MainModel?
+    private var hotkeysArmed = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Diag.app.notice("launch: accessibility=\(Permissions.accessibilityTrusted) inputMonitoring=\(Permissions.inputMonitoringGranted) microphone=\(Permissions.microphoneGranted)")
@@ -47,10 +48,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.pill.updateTranscript(text)
         }
 
-        // First-run permission prompts (spec §17: app keeps running regardless).
-        if !Permissions.accessibilityTrusted { Permissions.requestAccessibility() }
-        if !Permissions.inputMonitoringGranted { Permissions.requestInputMonitoring() }
-        Task { _ = await Permissions.requestMicrophone() }
+        // First-run prompting is owned by the onboarding wizard. Users who
+        // finished (or predate) onboarding keep prompt-on-launch (spec §17:
+        // the app keeps running regardless).
+        if store.settings.onboardingCompleted {
+            if !Permissions.accessibilityTrusted { Permissions.requestAccessibility() }
+            if !Permissions.inputMonitoringGranted { Permissions.requestInputMonitoring() }
+            Task { _ = await Permissions.requestMicrophone() }
+        }
 
         hotkeys = HotkeyListener()
         hotkeys.bindings = store.settings.bindings
@@ -71,7 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        if !hotkeys.start() {
+        hotkeysArmed = hotkeys.start()
+        if !hotkeysArmed && store.settings.onboardingCompleted {
             TextInjector.notify(title: "Murmur",
                 body: "Global hotkeys need Accessibility & Input Monitoring permission. Grant them, then relaunch from the menu bar icon.")
         }
@@ -88,6 +94,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 body: "Its menu bar icon is hidden behind the notch. Remove or ⌘-drag other menu bar icons to make room. Hold Fn to dictate — dictation works regardless.")
             self.showSettings()
         }
+
+        // First run: open the window so the onboarding wizard is visible.
+        if !store.settings.onboardingCompleted { showMain(.home) }
+    }
+
+    /// Called as onboarding pages land permission grants: the listener needs
+    /// Accessibility + Input Monitoring and only arms once both exist.
+    func rearmHotkeysIfNeeded() {
+        guard !hotkeysArmed else { return }
+        hotkeysArmed = hotkeys.start()
     }
 
     /// Opening Murmur.app while it's already running lands here: always show
@@ -103,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 self.hotkeys.bindings = self.store.settings.bindings
             }
+            model.onPermissionsChanged = { [weak self] in self?.rearmHotkeysIfNeeded() }
             mainModel = model
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 1060, height: 680),
